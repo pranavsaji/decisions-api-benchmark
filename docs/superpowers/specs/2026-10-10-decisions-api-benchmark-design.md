@@ -202,8 +202,19 @@ needs `OPENAI_API_KEY`.
 
 Expected total API cost is a few dollars.
 
-## Open items resolved during implementation
+## Open items, resolved 2026-10-10
 
-- Which reasoning-effort values `gpt-6-luna` accepts on the Responses API.
-- Whether a light source exists for TREC Deep Learning judged passages.
-- Whether deepset/prompt-injections has 300 usable cases per class, or needs a top-up source.
+- Reasoning effort: `gpt-6-luna` accepts `none`, `low`, `medium` (default), `high`, `xhigh` and
+  `max` on the Responses API. `responses_tuned` uses `none`.
+- Relevance data: `dmrau/trec_dl19` on Hugging Face holds a 1.2 MB corpus that covers 2,257 of
+  the TREC DL 2019 judgements, with at least 280 pairs at every grade. The four-grade design
+  stands and the BEIR fallback is not needed. The corpus holds passages that retrieval systems
+  surfaced, so the sample is not a random draw from all judged passages.
+- Injection data: deepset/prompt-injections has 263 attacks, fewer than 300. Each class takes
+  200 cases from deepset and 100 from `jackhhao/jailbreak-classification`, and the report breaks
+  results down by source.
+- Malformed answers: accuracy-type metrics count them as wrong. AUC, recall at a fixed
+  false-positive rate and kappa need a parsed answer, so they are computed on parsed answers
+  with the malformed count shown beside them.
+- Prices read on 2026-10-10: $0.10 per million input tokens, $0.01 cached input, $0.50 output.
+  The Decisions API bills input tokens only.
