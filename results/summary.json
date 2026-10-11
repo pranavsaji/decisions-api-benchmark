@@ -1,0 +1,194 @@
+{
+ "generated_at": "2026-10-11T05:36:38+00:00",
+ "model": "gpt-6-luna",
+ "prices": {
+  "per_million": {
+   "input": 0.1,
+   "cached_input": 0.01,
+   "output": 0.5
+  },
+  "read_on": "2026-10-10"
+ },
+ "rows": [
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "decisions",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.7802340702210663,
+    "ci": [
+     0.7496132220312823,
+     0.8080689731300548
+    ],
+    "n": 769,
+    "format": "percent"
+   },
+   "p50_ms": 132.0,
+   "p95_ms": 212.19999999999982,
+   "cost_per_1000": 0.0999048051948052,
+   "answered": 769,
+   "planned": 770
+  },
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "responses_default",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.8376623376623377,
+    "ci": [
+     0.8099499602242604,
+     0.8620221849796161
+    ],
+    "n": 770,
+    "format": "percent"
+   },
+   "p50_ms": 1965.5,
+   "p95_ms": 3010.0499999999993,
+   "cost_per_1000": 0.15519955844155842,
+   "answered": 770,
+   "planned": 770
+  },
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "responses_tuned",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.812987012987013,
+    "ci": [
+     0.7839162383142385,
+     0.8389502501247393
+    ],
+    "n": 770,
+    "format": "percent"
+   },
+   "p50_ms": 1454.5,
+   "p95_ms": 2071.2,
+   "cost_per_1000": 0.11992193506493508,
+   "answered": 770,
+   "planned": 770
+  },
+  {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "decisions",
+   "headline": {
+    "label": "AUC",
+    "value": 0.8897555555555555,
+    "ci": [
+     0.8649490358603358,
+     0.9118855043057311
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 127.0,
+   "p95_ms": 242.0999999999999,
+   "cost_per_1000": 0.03232966666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "responses_default",
+   "headline": {
+    "label": "AUC",
+    "value": 0.9480444444444445,
+    "ci": [
+     0.931483537388407,
+     0.9627755556034469
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 1367.5,
+   "p95_ms": 2349.3999999999987,
+   "cost_per_1000": 0.051163,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "responses_tuned",
+   "headline": {
+    "label": "AUC",
+    "value": 0.9467722222222222,
+    "ci": [
+     0.9318093757165145,
+     0.960990203433998
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 1019.0,
+   "p95_ms": 1651.1499999999999,
+   "cost_per_1000": 0.03040716666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "decisions",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.581377151799687,
+    "ci": [
+     0.5336478501409521,
+     0.6252708501163267
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 127.0,
+   "p95_ms": 286.0,
+   "cost_per_1000": 0.02756616666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "responses_default",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.5804597701149425,
+    "ci": [
+     0.5318666806117717,
+     0.6300896720583761
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 1692.5,
+   "p95_ms": 2526.749999999999,
+   "cost_per_1000": 0.07928533333333335,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "responses_tuned",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.615546218487395,
+    "ci": [
+     0.5648964783183222,
+     0.6656461268460558
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "p50_ms": 1331.5,
+   "p95_ms": 2232.1499999999996,
+   "cost_per_1000": 0.05140950000000001,
+   "answered": 600,
+   "planned": 600
+  }
+ ]
+}
