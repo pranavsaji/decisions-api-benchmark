@@ -133,6 +133,7 @@ def build_summary(reports: list[dict]) -> dict:
                     "title": built["title"],
                     "endpoint": endpoint,
                     "headline": summary["metrics"][built["headline"]],
+                    "paired": built["paired"].get(endpoint),
                     "p50_ms": summary["latency_ms"]["p50"],
                     "p95_ms": summary["latency_ms"]["p95"],
                     "cost_per_1000": summary["cost_per_1000"],

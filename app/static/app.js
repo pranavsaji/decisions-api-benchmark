@@ -1,10 +1,25 @@
 const ENDPOINTS = [
-  { key: "decisions", label: "Decisions API", color: "var(--c-decisions)" },
-  { key: "responses_default", label: "Responses API, default", color: "var(--c-default)" },
-  { key: "responses_tuned", label: "Responses API, tuned", color: "var(--c-tuned)" },
+  { key: "decisions", label: "Decisions API", short: "Decisions", color: "var(--c-decisions)" },
+  { key: "responses_default", label: "Responses API, default", short: "Responses, default", color: "var(--c-default)" },
+  { key: "responses_tuned", label: "Responses API, tuned", short: "Responses, tuned", color: "var(--c-tuned)" },
 ];
+// What each task stands for in a product. Keyed by task name; a task without an entry shows none.
+const USE_CASES = {
+  intent: {
+    use: "Route a customer message to the right queue",
+    detail: "A support inbox, chatbot or phone menu needs one label out of many, fast, with a confidence that says when to hand over to a person.",
+  },
+  injection: {
+    use: "Screen prompts before they reach your model",
+    detail: "A yes-or-no guardrail that runs on every request, so it has to be quick and cheap, with a probability you can set a threshold on.",
+  },
+  relevance: {
+    use: "Grade how well a passage answers a query",
+    detail: "Rerank search or retrieval results, or label relevance data at scale, on an ordered scale from 0 to 3.",
+  },
+};
 const CASE_LIMIT = 200;
-const state = { tasks: [], reports: {}, tab: "summary", disagreeOnly: false };
+const state = { tasks: [], reports: {}, tab: "summary", disagreeOnly: false, visit: 0 };
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -74,14 +89,122 @@ function renderTabs() {
 async function show(tab) {
   state.tab = tab;
   state.disagreeOnly = false;
+  const visit = ++state.visit;
   renderTabs();
   const view = document.getElementById("view");
-  view.replaceChildren(el("p", { class: "note" }, "Loading…"));
+  view.replaceChildren(el("p", { class: "note", style: "margin-top:40px" }, "Loading…"));
+  let nodes;
   try {
-    view.replaceChildren(...(tab === "summary" ? await renderSummary() : await renderTask(tab)));
+    nodes = tab === "summary" ? await renderSummary() : await renderTask(tab);
   } catch (error) {
-    view.replaceChildren(el("p", { class: "error" }, error.message));
+    nodes = [el("p", { class: "error", style: "margin-top:40px" }, error.message)];
   }
+  if (visit !== state.visit) return; // a later click already replaced this view
+  view.replaceChildren(...nodes);
+  window.scrollTo(0, 0);
+}
+
+// Where the Decisions API stands against one baseline, from the same-items comparison.
+function verdict(paired, format) {
+  if (!paired || !paired.ci) return null;
+  const size = format === "percent" ? (Math.abs(paired.difference) * 100).toFixed(1) + " pts" : Math.abs(paired.difference).toFixed(3);
+  if (paired.ci[0] > 0) return { tone: "behind", text: `behind by ${size}` };
+  if (paired.ci[1] < 0) return { tone: "ahead", text: `ahead by ${size}` };
+  return { tone: "level", text: "level" };
+}
+
+function range(values, unit) {
+  const usable = values.filter((value) => value != null && Number.isFinite(value)).map(Math.round);
+  if (!usable.length) return null;
+  const low = Math.min(...usable), high = Math.max(...usable);
+  return (low === high ? String(low) : `${low}–${high}`) + unit;
+}
+
+function statCard(kicker, big, tone, caption) {
+  return el(
+    "div",
+    { class: "stat rise" },
+    el("div", { class: "kicker" }, kicker),
+    el("div", { class: "big" + (big && tone ? " " + tone : "") + (big ? "" : " empty") }, big || NO_DATA),
+    el("p", {}, caption),
+  );
+}
+
+function heroStats(summary) {
+  const byTask = state.tasks.map((task) => Object.fromEntries(summary.rows.filter((row) => row.task === task.name).map((row) => [row.endpoint, row])));
+  const ratio = (rows, key, field) => (rows.decisions && rows[key] && rows.decisions[field] && rows[key][field] ? rows[key][field] / rows.decisions[field] : null);
+  const fasterDefault = range(byTask.map((rows) => ratio(rows, "responses_default", "p50_ms")), "×");
+  const fasterTuned = range(byTask.map((rows) => ratio(rows, "responses_tuned", "p50_ms")), "×");
+  const saving = byTask.map((rows) => {
+    const r = ratio(rows, "responses_default", "cost_per_1000");
+    return r == null ? null : (1 - 1 / r) * 100;
+  });
+  const cheaper = saving.every((value) => value == null || value > 0) ? range(saving, "%") : null;
+  const verdicts = (key) => byTask.map((rows) => (rows[key] ? verdict(rows[key].paired, rows[key].headline.format) : null)).filter(Boolean);
+  const againstDefault = verdicts("responses_default"), againstTuned = verdicts("responses_tuned");
+  const behind = (list) => list.filter((v) => v.tone === "behind").length;
+  const ahead = [...againstDefault, ...againstTuned].filter((v) => v.tone === "ahead").length;
+  const answered = summary.rows.reduce((sum, row) => sum + row.answered, 0);
+  const planned = summary.rows.reduce((sum, row) => sum + row.planned, 0);
+  return el(
+    "div",
+    { class: "stats" },
+    statCard("Speed", fasterDefault, "good", fasterTuned ? `faster than the default Responses API at the median, and ${fasterTuned} faster than Responses with reasoning off.` : "faster than the default Responses API at the median."),
+    statCard(
+      "Quality",
+      againstDefault.length ? `${behind(againstDefault)} of ${againstDefault.length}` : null,
+      behind(againstDefault) ? "bad" : null,
+      `tasks where it trails the default Responses API on the same items (${behind(againstTuned)} of ${againstTuned.length} against tuned). Ahead on ${ahead || "none"}.`,
+    ),
+    statCard("Cost", cheaper, "good", "cheaper than the default Responses API per 1,000 decisions. It bills input tokens only."),
+    statCard("Reliability", planned ? `${answered.toLocaleString()}` : null, null, `of ${planned.toLocaleString()} calls came back as a usable, well-formed answer.`),
+  );
+}
+
+function barRow(endpoint, share, text) {
+  return el(
+    "div",
+    { class: "bar-row" },
+    el("span", { class: "name" }, swatch(endpoint), endpoint.short),
+    el("div", { class: "track" }, share == null ? null : el("div", { class: "fill", style: `width:${Math.max(0, Math.min(1, share)) * 100}%;background:${endpoint.color}` })),
+    el("span", { class: "value" + (text === NO_DATA ? " empty" : "") }, text),
+  );
+}
+
+function useCaseCard(task, rows, index) {
+  const copy = USE_CASES[task.name];
+  const byKey = Object.fromEntries(rows.map((row) => [row.endpoint, row]));
+  const present = ENDPOINTS.filter((endpoint) => byKey[endpoint.key]);
+  const slowest = Math.max(...present.map((e) => byKey[e.key].p50_ms || 0));
+  const headline = rows[0].headline;
+  const pills = present
+    .filter((e) => e.key !== "decisions")
+    .map((e) => {
+      const v = verdict(byKey[e.key].paired, byKey[e.key].headline.format);
+      return v ? el("span", { class: `pill ${v.tone}` }, `vs ${e.short}: ${v.text}`) : null;
+    });
+  return el(
+    "article",
+    { class: "usecase rise", style: `animation-delay:${index * 70}ms` },
+    el("div", {}, el("span", { class: "chip accent" }, task.questions[0].type + " question")),
+    el("h3", {}, task.title),
+    copy ? el("p", { class: "use" }, copy.use) : null,
+    copy ? el("p", { class: "note" }, copy.detail) : null,
+    el(
+      "div",
+      {},
+      el("div", { class: "block-title" }, headline.label),
+      ...present.map((e) => barRow(e, byKey[e.key].headline.value, formatValue(byKey[e.key].headline.value, headline.format))),
+    ),
+    el(
+      "div",
+      {},
+      el("div", { class: "block-title" }, "Median response time"),
+      ...present.map((e) => barRow(e, byKey[e.key].p50_ms == null || !slowest ? null : byKey[e.key].p50_ms / slowest, formatMs(byKey[e.key].p50_ms))),
+    ),
+    pills.some(Boolean) ? el("div", { class: "verdicts", title: "Decisions API quality on the same items; a gap counts only when its 95% interval excludes zero" }, pills) : null,
+    el("button", { class: "ghost", type: "button", onclick: () => show(task.name) }, "Explore and try it →"),
+  );
 }
 
 async function renderSummary() {
@@ -95,7 +218,7 @@ async function renderSummary() {
         el(
           "tr",
           {},
-          index === 0 ? el("td", { rowspan: taskRows.length }, el("strong", {}, row.title), el("br"), row.headline.label) : null,
+          index === 0 ? el("td", { rowspan: taskRows.length }, el("strong", {}, row.title), el("span", { class: "sub" }, row.headline.label)) : null,
           el("td", {}, swatch(endpoint), endpoint.label),
           cell(formatMetric(row.headline)),
           cell(formatMs(row.p50_ms)),
@@ -107,8 +230,35 @@ async function renderSummary() {
     });
   }
   const prices = summary.prices.per_million;
+  const calls = summary.rows.reduce((sum, row) => sum + row.planned, 0);
+  const cards = state.tasks
+    .map((task) => [task, summary.rows.filter((row) => row.task === task.name)])
+    .filter(([, taskRows]) => taskRows.length)
+    .map(([task, taskRows], index) => useCaseCard(task, taskRows, index));
   return [
-    el("h2", {}, "All tasks at a glance"),
+    el(
+      "section",
+      { class: "hero rise" },
+      el(
+        "div",
+        { class: "eyebrow" },
+        el("span", { class: "chip accent" }, "Benchmark"),
+        el("span", { class: "chip" }, summary.model),
+        el("span", { class: "chip" }, `${state.tasks.length} use cases`),
+        el("span", { class: "chip" }, `${calls.toLocaleString()} calls`),
+      ),
+      el("h1", {}, "How good is the ", el("span", { class: "grad" }, "Decisions API"), "?"),
+      el(
+        "p",
+        { class: "lede" },
+        "Three jobs it should be best at, each asked three ways of the same model: typed decisions, the Responses API, and the Responses API with reasoning off.",
+      ),
+      heroStats(summary),
+    ),
+    el("h2", {}, "Use cases"),
+    el("p", { class: "note" }, "One task per Decisions question type. Bars show the headline quality metric and the median response time."),
+    el("div", { class: "usecases" }, cards),
+    el("h2", {}, "All the numbers"),
     el(
       "div",
       { class: "panel scroll" },
@@ -137,9 +287,16 @@ async function loadReport(name) {
 async function renderTask(name) {
   const task = state.tasks.find((t) => t.name === name);
   const question = task.questions[0];
+  const copy = USE_CASES[task.name];
   const intro = [
-    el("h2", {}, task.title),
-    el("p", { class: "note" }, `One ${question.type} question: “${question.instructions}”`),
+    el(
+      "section",
+      { class: "task-head rise" },
+      el("span", { class: "chip accent" }, question.type + " question"),
+      el("h1", {}, task.title),
+      copy ? el("p", { class: "use" }, copy.use + ". " + copy.detail) : null,
+      el("p", { class: "question" }, el("span", {}, "The question every endpoint is asked"), question.instructions),
+    ),
     playground(task),
   ];
   let report;
@@ -157,14 +314,27 @@ async function renderTask(name) {
     el(
       "div",
       { class: "charts" },
-      el("div", { class: "panel" }, el("strong", {}, "Response time"), latencyChart(report)),
-      el("div", { class: "panel" }, el("strong", {}, "Calibration"), calibrationChart(report)),
+      el("div", { class: "panel" }, el("strong", {}, "Response time"), latencyChart(report), legend(report)),
+      el("div", { class: "panel" }, el("strong", {}, "Calibration"), calibrationChart(report), legend(report)),
     ),
     el("h2", {}, "By group"),
     el("div", { class: "panel scroll" }, breakdownTable(report)),
     el("h2", {}, "Cases"),
     casesPanel(report),
   ];
+}
+
+function legend(report) {
+  return el("div", { class: "legend" }, ...presentEndpoints(report).map((e) => el("span", {}, swatch(e), e.label)));
+}
+
+function formatPaired(report, endpoint) {
+  if (endpoint.key === "decisions") return "baseline";
+  const paired = (report.paired || {})[endpoint.key];
+  if (!paired || !paired.ci) return NO_DATA;
+  const percent = report.endpoints[endpoint.key].metrics[report.headline].format === "percent";
+  const show = (value) => (value >= 0 ? "+" : "−") + (percent ? (Math.abs(value) * 100).toFixed(1) : Math.abs(value).toFixed(3));
+  return `${show(paired.difference)}${percent ? " pts" : ""} (${show(paired.ci[0])} to ${show(paired.ci[1])})`;
 }
 
 function presentEndpoints(report) {
@@ -183,6 +353,12 @@ function comparisonTable(report) {
       "tbody",
       {},
       ...metricKeys.map((key) => row(report.endpoints[endpoints[0].key].metrics[key].label, (s) => formatMetric(s.metrics[key]))),
+      el(
+        "tr",
+        {},
+        el("td", {}, `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to the Decisions API`, el("span", { class: "sub" }, "same items; real when the range excludes zero")),
+        ...endpoints.map((e) => cell(formatPaired(report, e))),
+      ),
       row("Calibration error", (s) => formatValue(s.calibration.error, "number")),
       row("Median response time", (s) => formatMs(s.latency_ms.p50)),
       row("95th-percentile response time", (s) => formatMs(s.latency_ms.p95)),
@@ -224,7 +400,7 @@ function latencyChart(report) {
     endpoints.forEach((endpoint, e) => {
       const height = (shares[e][b] / peak) * plotHeight;
       chart.append(
-        svgEl("rect", { x: left + b * slot + 2 + e * bar, y: H - bottom - height, width: Math.max(bar - 1, 1), height, fill: endpoint.color }),
+        svgEl("rect", { x: left + b * slot + 2 + e * bar, y: H - bottom - height, width: Math.max(bar - 1, 1), height, rx: 2, fill: endpoint.color }),
       );
     });
   });
@@ -325,9 +501,9 @@ function casesPanel(report) {
     { class: "panel" },
     el(
       "label",
-      {},
+      { class: "check" },
       el("input", { type: "checkbox", onchange: (event) => { state.disagreeOnly = event.target.checked; fill(); } }),
-      " Only cases where the endpoints disagree",
+      "Only cases where the endpoints disagree",
     ),
     count,
     el(
@@ -339,18 +515,23 @@ function casesPanel(report) {
 }
 
 function answerCard(endpoint, answer) {
-  const card = el("div", { class: "answer" }, el("h3", {}, swatch(endpoint), endpoint.label));
+  const card = el("div", { class: "answer", style: `border-top-color:${endpoint.color}` }, el("h4", {}, swatch(endpoint), endpoint.label));
   if (!answer) return card;
   if (answer.error) {
     card.append(el("p", { class: "error" }, answer.error));
     return card;
   }
-  card.append(el("div", { class: "big" }, answer.status === "ok" ? String(answer.label) : answer.status));
+  card.append(
+    el("div", { class: "big" }, answer.status === "ok" ? String(answer.label) : answer.status),
+    el("div", { class: "speed", style: `color:${endpoint.color}` }, formatMs(answer.latency_ms)),
+  );
+  if (answer.probability != null) {
+    card.append(el("div", { class: "track" }, el("div", { class: "fill", style: `width:${Math.max(0, Math.min(1, answer.probability)) * 100}%;background:${endpoint.color}` })));
+  }
   const facts = [];
   if (answer.probability != null) facts.push(["Probability", (answer.probability * 100).toFixed(1) + "%"]);
   if (answer.expected != null) facts.push(["Expected grade", answer.expected.toFixed(2)]);
   if (answer.ranked && answer.ranked.length > 1) facts.push(["Next most likely", answer.ranked.slice(1).join(", ")]);
-  facts.push(["Response time", formatMs(answer.latency_ms)]);
   facts.push(["Tokens in / out", `${answer.input_tokens ?? "unknown"} / ${answer.output_tokens ?? "unknown"}`]);
   card.append(el("dl", {}, ...facts.flatMap(([term, value]) => [el("dt", {}, term), el("dd", {}, value)])));
   return card;
@@ -389,6 +570,7 @@ function playground(task) {
     "form",
     { class: "panel", onsubmit: run },
     el("strong", {}, "Try it live"),
+    el("p", { class: "note" }, "Your input goes to all three endpoints at once. Watch the response times."),
     ...task.fields.flatMap(([key, label]) => [el("label", { for: `field-${key}` }, label), inputs[key]]),
     el(
       "div",

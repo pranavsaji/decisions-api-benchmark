@@ -150,3 +150,11 @@ def test_markdown_table_shows_the_paired_difference():
     (row,) = [line for line in lines if line.startswith("| AUC, difference from Decisions API on the same items |")]
     cells = [cell.strip() for cell in row.strip("|").split("|")]
     assert cells[1] == "baseline" and cells[2].startswith("+0.250 (") and cells[3] == "no data"
+
+
+def test_summary_rows_carry_the_paired_comparison():
+    summary = report.build_summary([report.build_task_report(TASK, ITEMS, paired_cache(), None)])
+    by_endpoint = {row["endpoint"]: row for row in summary["rows"]}
+    assert by_endpoint["decisions"]["paired"] is None
+    assert by_endpoint["responses_default"]["paired"]["difference"] == pytest.approx(0.25)
+    assert by_endpoint["responses_tuned"]["paired"] is None
