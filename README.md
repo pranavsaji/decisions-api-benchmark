@@ -29,12 +29,15 @@ interleaved through one worker pool so that all three see the same load.
 ## Results
 
 Run on 10 October 2026. Ranges are 95% intervals. Cost uses the token counts each call reported.
+The "difference" rows compare each Responses baseline with the Decisions API on the same items
+(paired bootstrap); a range that excludes zero is a real difference.
 
 ### Intent routing
 
 | | Decisions API | Responses API, default | Responses API, tuned |
 |---|---|---|---|
 | Top-1 accuracy | 78.0% (75.0 to 80.8) | 83.8% (81.0 to 86.2) | 81.3% (78.4 to 83.9) |
+| Top-1 accuracy, difference from Decisions API on the same items | baseline | +5.9 points (+3.8 to +7.8) | +3.4 points (+1.3 to +5.3) |
 | Top-3 accuracy | 89.2% (86.8 to 91.2) | 93.9% (92.0 to 95.4) | 92.6% (90.5 to 94.2) |
 | Median response time | 132 ms | 1,966 ms | 1,454 ms |
 | 95th-percentile response time | 212 ms | 3,010 ms | 2,071 ms |
@@ -46,6 +49,7 @@ Run on 10 October 2026. Ranges are 95% intervals. Cost uses the token counts eac
 | | Decisions API | Responses API, default | Responses API, tuned |
 |---|---|---|---|
 | AUC | 0.890 (0.865 to 0.912) | 0.948 (0.931 to 0.963) | 0.947 (0.932 to 0.961) |
+| AUC, difference from Decisions API on the same items | baseline | +0.058 (+0.037 to +0.079) | +0.057 (+0.036 to +0.077) |
 | Attacks caught at 1% false alarms | 75.0% (69.9 to 79.8) | 72.3% (67.5 to 77.4) | 71.0% (64.0 to 76.9) |
 | Accuracy at 50% cut-off | 83.8% (80.7 to 86.6) | 83.0% (79.8 to 85.8) | 83.5% (80.3 to 86.3) |
 | Median response time | 127 ms | 1,368 ms | 1,019 ms |
@@ -58,6 +62,7 @@ Run on 10 October 2026. Ranges are 95% intervals. Cost uses the token counts eac
 | | Decisions API | Responses API, default | Responses API, tuned |
 |---|---|---|---|
 | Agreement with human grades (weighted kappa) | 0.581 (0.534 to 0.625) | 0.580 (0.532 to 0.630) | 0.616 (0.565 to 0.666) |
+| Agreement with human grades (weighted kappa), difference from Decisions API on the same items | baseline | -0.001 (-0.031 to +0.030) | +0.034 (+0.002 to +0.067) |
 | Exact grade matched | 43.3% (39.4 to 47.3) | 44.7% (40.7 to 48.7) | 46.3% (42.4 to 50.3) |
 | Median response time | 127 ms | 1,692 ms | 1,332 ms |
 | 95th-percentile response time | 286 ms | 2,527 ms | 2,232 ms |
@@ -71,15 +76,17 @@ Run on 10 October 2026. Ranges are 95% intervals. Cost uses the token counts eac
   11 times faster than the tuned one (1,019 to 1,454 ms). Turning reasoning off closes only about
   a quarter of the gap, so most of it is not reasoning overhead.
 - **It lost on intent routing.** With 77 options, the Decisions API scored 78.0% top-1 against
-  83.8% for the default Responses API, and the intervals do not overlap. Top-3 shows the same gap
-  (89.2% against 93.9%). Against the tuned Responses API (81.3%) the intervals overlap.
+  83.8% for the default Responses API and 81.3% for the tuned one. On the same items it trails by
+  5.9 points (3.8 to 7.8) and 3.4 points (1.3 to 5.3), so it lost to both. Top-3 shows the same
+  order (89.2% against 93.9% and 92.6%).
 - **Injection detection is mixed.** The Decisions API has a lower AUC (0.890 against 0.948 and
-  0.947, intervals apart). At the operating points a guardrail would use, the three tie: 75.0%,
-  72.3% and 71.0% of attacks caught at 1% false alarms, and 83.0% to 83.8% accuracy at the 50%
-  cut-off. All three flag only about half of the deepset attacks (106 or 107 of 200) and no
-  benign prompt.
-- **Search relevance is a tie.** Weighted kappa is 0.581, 0.580 and 0.616, with overlapping
-  intervals, at a fraction of the time and cost.
+  0.947; it trails both by about 0.06, range 0.04 to 0.08). At fixed cut-offs the three are
+  close, with overlapping intervals: 75.0%, 72.3% and 71.0% of attacks caught at 1% false alarms,
+  and 83.0% to 83.8% accuracy at the 50% cut-off. All three flag only about half of the deepset
+  attacks (106 or 107 of 200) and no benign prompt.
+- **Search relevance is a tie with the default Responses API, and slightly behind the tuned
+  one.** Weighted kappa is 0.581 against 0.580 (difference -0.001, range -0.031 to +0.030) and
+  0.616 (difference +0.034, range +0.002 to +0.067), at about a tenth of the response time.
 - **Cost is lower on two tasks, equal on one.** The Decisions API is cheapest on relevance
   ($0.028 against $0.079 and $0.051 per 1,000) and intent ($0.100 against $0.155 and $0.120). On
   injection it matches the tuned Responses API ($0.032 against $0.030), because it reported more

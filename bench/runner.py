@@ -87,19 +87,33 @@ def run(
             pool.submit(attempt, endpoints[name], client, task, item, retries, pause): (item, name)
             for item, name in todo
         }
-        for future in as_completed(futures):
+        written = set()
+
+        def write(future) -> dict:
             item, name = futures[future]
-            try:
-                row = future.result()
-            except FATAL as error:
-                pool.shutdown(cancel_futures=True)
-                raise SystemExit(f"OpenAI rejected the request, stopping: {error}")
-            row = {"item_id": item["id"], "endpoint": name, **row}
+            row = {"item_id": item["id"], "endpoint": name, **future.result()}
             out.write(json.dumps(row) + "\n")
             out.flush()
+            written.add(future)
             counts[row["status"]] += 1
-            if on_row:
-                on_row(row)
+            return row
+
+        try:
+            for future in as_completed(futures):
+                try:
+                    row = write(future)
+                except FATAL as error:
+                    raise SystemExit(f"OpenAI rejected the request, stopping: {error}")
+                if on_row:
+                    on_row(row)
+        except BaseException:
+            # Stopped early (Ctrl-C or a fatal error): start no new calls, and keep every answer
+            # that was already paid for so the next run does not repeat it.
+            pool.shutdown(wait=True, cancel_futures=True)
+            for future in futures:
+                if future not in written and future.done() and not future.cancelled() and not future.exception():
+                    write(future)
+            raise
     return counts
 
 

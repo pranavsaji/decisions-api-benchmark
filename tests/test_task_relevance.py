@@ -118,3 +118,16 @@ def test_score_with_no_answers_returns_empty_metrics():
 
 def test_input_shows_the_query_then_the_passage():
     assert TASK.render_input({"query": "q?", "passage": "p."}) == "Query: q?\n\nPassage: p."
+
+
+def test_decisions_probabilities_of_the_wrong_type_are_malformed_not_a_crash():
+    raw = decision(1.0, [0, 1, 0, 0])
+    raw["answers"][0]["probabilities"] = 5
+    assert TASK.to_prediction("decisions", raw)["status"] == "malformed"
+
+
+def test_headline_value_is_kappa_on_parsed_answers():
+    pairs = [({"label": n}, {"status": "ok", "label": n}) for n in (0, 1, 2, 3)]
+    pairs.append(({"label": 0}, {"status": "malformed", "label": None}))
+    assert TASK.headline_value(pairs) == pytest.approx(1.0)
+    assert TASK.headline_value([]) is None

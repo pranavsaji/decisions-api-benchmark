@@ -77,6 +77,23 @@ def summarise_endpoint(task, items: list[dict], cache: dict, endpoint: str) -> t
     return summary, answers
 
 
+def paired_comparison(task, items: list[dict], answers: dict, endpoint: str, baseline: str = "decisions") -> dict | None:
+    """Headline metric of endpoint minus baseline, on the items both of them answered."""
+    usable = ("ok", "malformed")
+    shared = [
+        item
+        for item in items
+        if answers[endpoint].get(item["id"], {}).get("status") in usable
+        and answers[baseline].get(item["id"], {}).get("status") in usable
+    ]
+    compared = metrics.paired_difference(
+        task.headline_value,
+        [(item, answers[endpoint][item["id"]]) for item in shared],
+        [(item, answers[baseline][item["id"]]) for item in shared],
+    )
+    return {**compared, "baseline": baseline, "n": len(shared)} if compared else None
+
+
 def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None) -> dict:
     endpoints = {}
     answers = {}
@@ -101,6 +118,7 @@ def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None
         "fields": [list(field) for field in task.fields],
         "headline": task.headline,
         "endpoints": endpoints,
+        "paired": {name: paired_comparison(task, items, answers, name) for name in ENDPOINTS if name != "decisions"},
         "cases": cases,
     }
 
@@ -169,6 +187,23 @@ def markdown(built: dict) -> str:
     ]
     for key, metric in summaries[names[0]]["metrics"].items():
         lines.append(row(metric["label"], lambda s, key=key: _metric(s["metrics"][key])))
+    headline = summaries[names[0]]["metrics"][built["headline"]]
+
+    def paired(name: str) -> str:
+        if name == "decisions":
+            return "baseline"
+        compared = built["paired"].get(name)
+        if not compared or not compared["ci"]:
+            return "no data"
+        scale, digits, unit = (100, 1, " points") if headline["format"] == "percent" else (1, 3, "")
+        low, high = (f"{bound * scale:+.{digits}f}" for bound in compared["ci"])
+        return f"{compared['difference'] * scale:+.{digits}f}{unit} ({low} to {high})"
+
+    lines.append(
+        f"| {headline['label']}, difference from Decisions API on the same items | "
+        + " | ".join(paired(name) for name in names)
+        + " |"
+    )
     lines.append(row("Median response time", lambda s: ms(s["latency_ms"]["p50"])))
     lines.append(row("95th-percentile response time", lambda s: ms(s["latency_ms"]["p95"])))
     lines.append(

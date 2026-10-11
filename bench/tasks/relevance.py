@@ -65,7 +65,8 @@ def to_prediction(endpoint: str, raw) -> dict:
         if payload.get("type") != "score":
             return blank("malformed")
         table = {}
-        for entry in payload.get("probabilities") or []:
+        entries = payload.get("probabilities")
+        for entry in entries if isinstance(entries, list) else []:
             if isinstance(entry, dict) and _is_grade(entry.get("value")):
                 table[entry["value"]] = entry.get("probability")
         probabilities = [table.get(n) for n in GRADES]
@@ -89,6 +90,10 @@ def to_prediction(endpoint: str, raw) -> dict:
 
 def _kappa(rows: list[tuple[int, int]]) -> float | None:
     return metrics.quadratic_weighted_kappa([t for t, _ in rows], [p for _, p in rows], len(LEVELS))
+
+
+def headline_value(pairs: list[tuple[dict, dict]]) -> float | None:
+    return _kappa([(i["label"], p["label"]) for i, p in pairs if p["status"] == "ok"])
 
 
 def score(items: list[dict], predictions: list[dict]) -> dict:
@@ -121,6 +126,7 @@ TASK = Task(
     to_prediction=to_prediction,
     score=score,
     headline="kappa",
+    headline_value=headline_value,
     examples=[
         {
             "query": "how long does it take to boil an egg",

@@ -145,3 +145,20 @@ def test_load_items_names_the_fetch_command_when_data_is_missing(tmp_path, monke
         base.load_items("intent")
     (tmp_path / "intent.jsonl").write_text('{"id": "a", "text": "hi", "label": "age_limit"}\n\n')
     assert base.load_items("intent") == [{"id": "a", "text": "hi", "label": "age_limit"}]
+
+
+def test_decisions_probabilities_of_the_wrong_type_are_malformed_not_a_crash():
+    raw = decision("card_arrival", [])
+    raw["answers"][0]["probabilities"] = 5
+    assert TASK.to_prediction("decisions", raw)["status"] == "malformed"
+
+
+def test_headline_value_is_top1_accuracy_with_malformed_counted_wrong():
+    pairs = [
+        ({"label": "card_arrival"}, {"status": "ok", "label": "card_arrival"}),
+        ({"label": "card_arrival"}, {"status": "ok", "label": "age_limit"}),
+        ({"label": "card_arrival"}, {"status": "malformed", "label": None}),
+        ({"label": "age_limit"}, {"status": "ok", "label": "age_limit"}),
+    ]
+    assert TASK.headline_value(pairs) == 0.5
+    assert TASK.headline_value([]) is None

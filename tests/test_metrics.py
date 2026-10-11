@@ -99,3 +99,14 @@ def test_cost_per_1000_uses_the_price_table():
     assert metrics.cost_per_1000(2000, 1500, 300) == pytest.approx(0.215)
     assert metrics.cost_per_1000(400, None, None) == pytest.approx(0.04)
     assert metrics.cost_per_1000(None, None, None) is None
+
+
+def test_paired_difference_resamples_both_sides_together():
+    mean = lambda rows: sum(rows) / len(rows) if rows else None
+    # b beats a on every item by exactly 1, so every joint resample gives a difference of 1.
+    a, b = [0, 1, 2, 3, 4], [1, 2, 3, 4, 5]
+    compared = metrics.paired_difference(mean, b, a)
+    assert compared["difference"] == pytest.approx(1.0) and compared["ci"] == pytest.approx([1.0, 1.0])
+    assert metrics.paired_difference(mean, [], []) is None
+    with pytest.raises(ValueError):
+        metrics.paired_difference(mean, [1], [1, 2])

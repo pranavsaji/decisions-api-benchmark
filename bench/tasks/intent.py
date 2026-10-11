@@ -69,7 +69,8 @@ def to_prediction(endpoint: str, raw) -> dict:
             return blank("malformed")
         choice = payload.get("choice")
         table = {}
-        for entry in payload.get("probabilities") or []:
+        entries = payload.get("probabilities")
+        for entry in entries if isinstance(entries, list) else []:
             if isinstance(entry, dict) and isinstance(entry.get("value"), str):
                 table[entry["value"]] = entry.get("probability")
         probability = table.get(choice) if isinstance(choice, str) else None
@@ -85,6 +86,10 @@ def to_prediction(endpoint: str, raw) -> dict:
     if not isinstance(choice, str) or choice not in INTENT_SET or not is_probability(probability):
         return blank("malformed")
     return {**blank("ok"), "label": choice, "ranked": ranked, "probability": probability}
+
+
+def headline_value(pairs: list[tuple[dict, dict]]) -> float | None:
+    return sum(correct(i, p) for i, p in pairs) / len(pairs) if pairs else None
 
 
 def score(items: list[dict], predictions: list[dict]) -> dict:
@@ -116,6 +121,7 @@ TASK = Task(
     to_prediction=to_prediction,
     score=score,
     headline="top1_accuracy",
+    headline_value=headline_value,
     examples=[
         {"text": "I ordered my card two weeks ago and it still has not turned up."},
         {"text": "Why was I charged a fee when I took cash out abroad?"},

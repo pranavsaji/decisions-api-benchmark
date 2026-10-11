@@ -23,6 +23,8 @@ class Task:
     score: Callable[[list[dict], list[dict]], dict]
     headline: str  # key of the headline metric in score()["metrics"]
     examples: list[dict]
+    # headline metric from (item, prediction) pairs; used to compare endpoints on the same items
+    headline_value: Callable[[list[tuple[dict, dict]]], float | None]
 
 
 def blank(status: str) -> dict:

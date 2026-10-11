@@ -117,3 +117,36 @@ def test_markdown_table_shows_values_and_marks_missing_data():
     assert "| Median response time | 200 ms | no data | no data |" in lines
     assert "| Cost per 1,000 decisions | $0.040 | no data | no data |" in lines
     assert "| Answered | 2 of 5 (1 refused, 0 malformed, 1 errors) | 0 of 5 | 0 of 5 |" in lines
+
+
+def response_row(item_id, endpoint, probability):
+    raw = {"text": '{"probability": %s}' % probability, "refused": False}
+    return {**ok_row(item_id, endpoint, 0.0, 900, tokens=(100, 0, 20)), "raw": raw}
+
+
+def paired_cache():
+    rows = [
+        ok_row("a", "decisions", 0.4, 100), ok_row("b", "decisions", 0.6, 100),
+        ok_row("c", "decisions", 0.9, 100), ok_row("d", "decisions", 0.1, 100),
+        response_row("a", "responses_default", 0.8), response_row("b", "responses_default", 0.2),
+        response_row("c", "responses_default", 0.9), response_row("d", "responses_default", 0.1),
+        response_row("e", "responses_default", 0.1),
+    ]
+    return {(row["item_id"], row["endpoint"]): row for row in rows}
+
+
+def test_task_report_compares_each_baseline_with_decisions_on_shared_items():
+    built = report.build_task_report(TASK, ITEMS, paired_cache(), None)
+    assert "decisions" not in built["paired"]
+    default = built["paired"]["responses_default"]
+    # On a to d, Decisions ranks one benign above one attack (AUC 0.75); the baseline ranks all correctly.
+    assert default["n"] == 4 and default["difference"] == pytest.approx(0.25)
+    assert default["ci"][0] <= 0.25 <= default["ci"][1]
+    assert built["paired"]["responses_tuned"] is None
+
+
+def test_markdown_table_shows_the_paired_difference():
+    lines = report.markdown(report.build_task_report(TASK, ITEMS, paired_cache(), None)).splitlines()
+    (row,) = [line for line in lines if line.startswith("| AUC, difference from Decisions API on the same items |")]
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    assert cells[1] == "baseline" and cells[2].startswith("+0.250 (") and cells[3] == "no data"

@@ -142,3 +142,28 @@ def test_on_row_is_called_for_each_new_row(tmp_path):
 
 def test_cache_path_is_under_tmp_runs():
     assert runner.cache_path("intent").parts[-3:] == (".tmp", "runs", "intent.jsonl")
+
+
+def test_an_interrupted_run_stops_calling_and_keeps_every_answer_it_paid_for(tmp_path):
+    import time
+
+    path = tmp_path / "runs" / "injection.jsonl"
+    items = [{"id": str(n), "text": "x", "label": "benign"} for n in range(40)]
+    calls = []
+
+    def slow(client, task, item):
+        calls.append(item["id"])
+        time.sleep(0.02)
+        return answer()
+
+    seen = []
+
+    def interrupt_after_three(row):
+        seen.append(row)
+        if len(seen) == 3:
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        runner.run(TASK, items, {"decisions": slow}, path, workers=2, on_row=interrupt_after_three)
+    assert len(calls) < 10
+    assert sorted(r["item_id"] for r in rows(path)) == sorted(calls)

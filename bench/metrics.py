@@ -119,6 +119,26 @@ def bootstrap_ci(statistic, rows: list, resamples: int = 1000, seed: int = 0) ->
     return [percentile(values, 0.025), percentile(values, 0.975)]
 
 
+def paired_difference(statistic, rows_a: list, rows_b: list, resamples: int = 1000, seed: int = 0) -> dict | None:
+    """statistic(rows_a) - statistic(rows_b) with a 95% interval, resampling the same items on both sides."""
+    if len(rows_a) != len(rows_b):
+        raise ValueError("paired rows must have the same length")
+    if not rows_a:
+        return None
+    first, second = statistic(rows_a), statistic(rows_b)
+    if first is None or second is None:
+        return None
+    rng = random.Random(seed)
+    values = []
+    for _ in range(resamples):
+        picks = [rng.randrange(len(rows_a)) for _ in rows_a]
+        first_value, second_value = statistic([rows_a[n] for n in picks]), statistic([rows_b[n] for n in picks])
+        if first_value is not None and second_value is not None:
+            values.append(first_value - second_value)
+    ci = [percentile(values, 0.025), percentile(values, 0.975)] if values else None
+    return {"difference": first - second, "ci": ci}
+
+
 def histogram(values: list[float], edges: list[float]) -> list[dict]:
     buckets = [
         {"low": low, "high": high, "n": 0}
