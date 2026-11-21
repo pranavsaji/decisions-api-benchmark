@@ -97,3 +97,24 @@ def test_sample_relevance_accepts_float_scores_and_fails_when_a_grade_is_short()
     assert len(fetch.sample_relevance(corpus, queries, floats, per_grade=2, seed=1)) == 8
     with pytest.raises(ValueError, match="grade 0 has 10 pairs, need 11"):
         fetch.sample_relevance(corpus, queries, qrels, per_grade=11, seed=1)
+
+
+def test_intent_training_drops_messages_that_repeat_a_scored_item():
+    rows = [{"text": "Where is my card?", "category": "card_arrival"}, {"text": "Hi", "category": "atm_support"}]
+    training = fetch.training_intent(rows, [{"text": "where  is my CARD?"}])
+    assert training == [{"id": "b77-train-1", "text": "Hi", "label": "atm_support"}]
+
+
+def test_injection_training_is_the_pool_without_the_scored_items():
+    deepset, jackhhao = injection_sources()
+    pool = fetch.injection_pool(deepset, jackhhao)
+    scored = fetch.sample_injection(deepset, jackhhao, {"deepset": 4, "jackhhao": 2}, seed=1)
+    training = fetch.training_injection(pool, scored, seed=1)
+    assert len(training) == len(pool) - len(scored)
+    assert not {row["text"] for row in training} & {item["text"] for item in scored}
+
+
+def test_relevance_training_caps_each_grade():
+    by_grade = {grade: [{"id": f"{grade}-{n}", "label": grade} for n in range(5 + grade)] for grade in range(4)}
+    rows = fetch.training_relevance(by_grade, cap=6, seed=1)
+    assert Counter(row["label"] for row in rows) == {0: 5, 1: 6, 2: 6, 3: 6}
