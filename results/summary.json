@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-11T06:16:46+00:00",
+ "generated_at": "2026-11-21T02:37:31+00:00",
  "model": "gpt-6-luna",
  "prices": {
   "per_million": {
@@ -7,7 +7,9 @@
    "cached_input": 0.01,
    "output": 0.5
   },
-  "read_on": "2026-10-10"
+  "read_on": "2026-10-10",
+  "embedding_per_million": 0.02,
+  "embedding_model": "text-embedding-3-small"
  },
  "rows": [
   {
@@ -86,6 +88,64 @@
    "p50_ms": 1454.5,
    "p95_ms": 2071.2,
    "cost_per_1000": 0.11992193506493508,
+   "answered": 770,
+   "planned": 770
+  },
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "nineteenth",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.938961038961039,
+    "ci": [
+     0.9197739560921956,
+     0.9537898326728438
+    ],
+    "n": 770,
+    "format": "percent"
+   },
+   "paired": {
+    "difference": 0.15864759427828357,
+    "ci": [
+     0.13133940182054615,
+     0.18725617685305596
+    ],
+    "baseline": "decisions",
+    "n": 769
+   },
+   "p50_ms": 267.0,
+   "p95_ms": 376.54999999999995,
+   "cost_per_1000": 0.0002510909090909091,
+   "answered": 770,
+   "planned": 770
+  },
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "local_baseline",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.948051948051948,
+    "ci": [
+     0.9300340794020369,
+     0.9616212671184915
+    ],
+    "n": 770,
+    "format": "percent"
+   },
+   "paired": {
+    "difference": 0.1677503250975293,
+    "ci": [
+     0.14174252275682708,
+     0.19635890767230169
+    ],
+    "baseline": "decisions",
+    "n": 769
+   },
+   "p50_ms": 184.0,
+   "p95_ms": 261.0,
+   "cost_per_1000": 0.0002510909090909091,
    "answered": 770,
    "planned": 770
   },
@@ -169,6 +229,64 @@
    "planned": 600
   },
   {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "nineteenth",
+   "headline": {
+    "label": "AUC",
+    "value": 0.9761,
+    "ci": [
+     0.9655400052446286,
+     0.9849416359293883
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": 0.08634444444444445,
+    "ci": [
+     0.06418365366796294,
+     0.11072097590433964
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "p50_ms": 268.0,
+   "p95_ms": 380.3499999999997,
+   "cost_per_1000": 0.002445266666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "local_baseline",
+   "headline": {
+    "label": "AUC",
+    "value": 0.9713,
+    "ci": [
+     0.9586708016614264,
+     0.9821373536436593
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": 0.08154444444444453,
+    "ci": [
+     0.058470839910576326,
+     0.10590596520267563
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "p50_ms": 184.0,
+   "p95_ms": 247.0,
+   "cost_per_1000": 0.002445266666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
    "task": "relevance",
    "title": "Search relevance",
    "endpoint": "decisions",
@@ -244,6 +362,64 @@
    "p50_ms": 1331.5,
    "p95_ms": 2232.1499999999996,
    "cost_per_1000": 0.05140950000000001,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "nineteenth",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.07965451055662198,
+    "ci": [
+     0.045895247971908866,
+     0.11298474478575074
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": -0.501722641243065,
+    "ci": [
+     -0.5585578913014225,
+     -0.4454433816658262
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "p50_ms": 281.0,
+   "p95_ms": 440.1999999999998,
+   "cost_per_1000": 0.0017795666666666668,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "local_baseline",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.29613466334164584,
+    "ci": [
+     0.23841480184567726,
+     0.35944055938364644
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": -0.2852424884580411,
+    "ci": [
+     -0.35022342052842864,
+     -0.2172014505603672
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "p50_ms": 188.0,
+   "p95_ms": 251.04999999999995,
+   "cost_per_1000": 0.0017795666666666668,
    "answered": 600,
    "planned": 600
   }
