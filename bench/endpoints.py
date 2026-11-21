@@ -71,5 +71,6 @@ ENDPOINTS = {
     "responses_default": responses_default,
     "responses_tuned": responses_tuned,
     "nineteenth": supervised.nineteenth_call,
+    "nineteenth_ultra": supervised.nineteenth_ultra_call,
     "local_baseline": supervised.baseline_call,
 }

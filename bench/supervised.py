@@ -23,6 +23,8 @@ from bench import embeddings, nineteenth
 from bench.tasks.base import ROOT, Task
 
 MODELS = ROOT / ".tmp" / "models"
+# The 19th endpoints and the training_mode each one is trained with.
+NINETEENTH_MODES = {"nineteenth": "high", "nineteenth_ultra": "ultra"}
 NAMESPACE = uuid.UUID("6f1c9a52-3b0e-4d43-9a57-19a0c3f2d7e1")
 
 
@@ -281,7 +283,7 @@ def reduce_19th(task_name: str, output) -> dict | None:
 def reduced(endpoint: str, raw) -> dict | None:
     if not isinstance(raw, dict):
         return None
-    if endpoint == "nineteenth":
+    if endpoint in NINETEENTH_MODES:
         return reduce_19th(raw.get("task"), raw.get("output"))
     return raw if isinstance(raw.get("probabilities"), dict) else None
 
@@ -302,8 +304,8 @@ def _embed_item(client, task: Task, item: dict) -> tuple[np.ndarray, int, int | 
     return embeddings.embed_timed(client, item_texts(task.name, item))
 
 
-def nineteenth_call(client, task: Task, item: dict) -> dict:
-    url = load_model(task.name, "nineteenth")["prediction_url"]
+def nineteenth_call(client, task: Task, item: dict, endpoint: str = "nineteenth") -> dict:
+    url = load_model(task.name, endpoint)["prediction_url"]
     vectors, embed_ms, tokens = _embed_item(client, task, item)
     started = time.perf_counter()
     output = nineteenth.predict(_http_client(), url, record(task.name, vectors))
@@ -317,6 +319,10 @@ def nineteenth_call(client, task: Task, item: dict) -> dict:
         "cached_tokens": None,
         "output_tokens": 0,
     }
+
+
+def nineteenth_ultra_call(client, task: Task, item: dict) -> dict:
+    return nineteenth_call(client, task, item, endpoint="nineteenth_ultra")
 
 
 def baseline_call(client, task: Task, item: dict) -> dict:

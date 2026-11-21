@@ -181,6 +181,7 @@ def test_trained_endpoints_appear_only_once_they_have_answers():
     assert "nineteenth" not in report.build_task_report(TASK, ITEMS, cache(), None)["endpoints"]
     built = report.build_task_report(TASK, ITEMS, trained_cache(), None)
     assert list(built["endpoints"])[-2:] == ["nineteenth", "local_baseline"]
+    assert "nineteenth_ultra" not in built["endpoints"]
     assert built["embedding_model"] == "text-embedding-3-small"
 
 
@@ -193,8 +194,9 @@ def test_trained_endpoints_price_the_embedding_and_split_the_latency():
 def test_19th_is_compared_with_the_local_baseline_on_the_same_items():
     built = report.build_task_report(TASK, ITEMS, trained_cache(), None)
     # On a to d, 19th ranks both attacks above both benign items (AUC 1.0); the baseline gets 0.75.
-    assert built["paired_trained"]["difference"] == pytest.approx(0.25)
-    assert built["paired_trained"]["baseline"] == "local_baseline"
+    compared = built["paired_extra"]["local_baseline"]["nineteenth"]
+    assert compared["difference"] == pytest.approx(0.25) and compared["baseline"] == "local_baseline"
+    assert "nineteenth" not in built["paired_extra"]  # no ultra answers, so no ultra-against-high row
     lines = report.markdown(built).splitlines()
     (row,) = [line for line in lines if "difference from the local baseline" in line]
     cells = [cell.strip() for cell in row.strip("|").split("|")]
@@ -207,3 +209,17 @@ def test_summary_carries_19th_against_the_baseline_and_its_embedding_time():
     assert by_endpoint["nineteenth"]["paired_trained"]["difference"] == pytest.approx(0.25)
     assert by_endpoint["local_baseline"]["paired_trained"] is None
     assert by_endpoint["nineteenth"]["embed_p50_ms"] == 50 and by_endpoint["decisions"]["embed_p50_ms"] is None
+
+
+def test_ultra_is_compared_with_the_baseline_and_with_high_mode():
+    rows = [*trained_cache().values()]
+    rows += [{**trained_row(i, "nineteenth", p), "endpoint": "nineteenth_ultra"} for i, p in zip("abcd", (0.9, 0.2, 0.15, 0.1))]
+    built = report.build_task_report(TASK, ITEMS, {(r["item_id"], r["endpoint"]): r for r in rows}, None)
+    assert list(built["endpoints"])[-3:] == ["nineteenth", "nineteenth_ultra", "local_baseline"]
+    assert set(built["paired_extra"]["local_baseline"]) == {"nineteenth", "nineteenth_ultra"}
+    # Ultra ranks a to d with AUC 0.75 against high's 1.0.
+    assert built["paired_extra"]["nineteenth"]["nineteenth_ultra"]["difference"] == pytest.approx(-0.25)
+    lines = report.markdown(built).splitlines()
+    (row,) = [line for line in lines if "difference from 19th, high on the same items" in line]
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    assert cells[-3] == "baseline" and cells[-2].startswith("-0.250 (") and cells[-1] == ""

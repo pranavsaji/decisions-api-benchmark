@@ -2,7 +2,8 @@ const ENDPOINTS = [
   { key: "decisions", label: "Decisions API", short: "Decisions", color: "var(--c-decisions)" },
   { key: "responses_default", label: "Responses API, default", short: "Responses, default", color: "var(--c-default)" },
   { key: "responses_tuned", label: "Responses API, tuned", short: "Responses, tuned", color: "var(--c-tuned)" },
-  { key: "nineteenth", label: "19th", short: "19th", color: "var(--c-nineteenth)", trained: true },
+  { key: "nineteenth", label: "19th, high", short: "19th, high", color: "var(--c-nineteenth)", trained: true },
+  { key: "nineteenth_ultra", label: "19th, ultra", short: "19th, ultra", color: "var(--c-ultra)", trained: true },
   { key: "local_baseline", label: "Local baseline", short: "Local baseline", color: "var(--c-baseline)", trained: true },
 ];
 // What each task stands for in a product. Keyed by task name; a task without an entry shows none.
@@ -180,7 +181,7 @@ function trainedStats(summary) {
   const slower = range(tasks.map(([, rows]) => (rows.decisions && rows.decisions.p50_ms ? rows.nineteenth.p50_ms / rows.decisions.p50_ms : null)), "×");
   const embed = range(tasks.map(([, rows]) => rows.nineteenth.embed_p50_ms), " ms");
   return [
-    el("p", { class: "stats-label" }, "19th, trained on labelled examples"),
+    el("p", { class: "stats-label" }, "19th in high mode, trained on labelled examples"),
     el(
       "div",
       { class: "stats" },
@@ -322,7 +323,7 @@ async function renderSummary() {
       `Ranges are 95% intervals. Cost uses reported token counts at $${prices.input.toFixed(2)} input, ` +
         `$${prices.cached_input.toFixed(2)} cached input and $${prices.output.toFixed(2)} output per million tokens ` +
         `(read ${summary.prices.read_on}). The Decisions API bills input tokens only.` +
-        (summary.rows.some((row) => row.endpoint === "nineteenth" || row.endpoint === "local_baseline")
+        (summary.rows.some((row) => (ENDPOINTS.find((e) => e.key === row.endpoint) || {}).trained)
           ? ` For 19th and the local baseline, cost covers the ${summary.prices.embedding_model} call only ` +
             `($${summary.prices.embedding_per_million.toFixed(2)} per million tokens); 19th publishes no prices during its alpha.`
           : ""),
@@ -381,7 +382,9 @@ function trainingNote(report) {
   const training = report.dataset && report.dataset.training;
   if (!trained.length || !training) return null;
   const rows = training.counts ? training.counts.total.toLocaleString() : "the";
-  const names = trained.map((e, i) => (e.key === "local_baseline" ? (i ? "the local baseline" : "The local baseline") : e.label)).join(" and ");
+  const modes = trained.filter((e) => e.key.startsWith("nineteenth")).length;
+  const parts = [modes > 1 ? "19th in both modes" : modes ? "19th" : null, trained.some((e) => e.key === "local_baseline") ? "the local baseline" : null].filter(Boolean);
+  const names = parts.join(" and ").replace(/^t/, "T");
   return el(
     "p",
     { class: "note" },
@@ -397,8 +400,9 @@ function legend(report) {
 
 function formatPaired(report, endpoint, against = "decisions") {
   if (endpoint.key === against) return "baseline";
-  if (against !== "decisions" && endpoint.key !== "nineteenth") return "";
-  const paired = against === "decisions" ? (report.paired || {})[endpoint.key] : report.paired_trained;
+  const extra = ((report.paired_extra || {})[against] || {});
+  if (against !== "decisions" && !(endpoint.key in extra)) return "";
+  const paired = against === "decisions" ? (report.paired || {})[endpoint.key] : extra[endpoint.key];
   if (!paired || !paired.ci) return NO_DATA;
   const percent = report.endpoints[endpoint.key].metrics[report.headline].format === "percent";
   const show = (value) => (value >= 0 ? "+" : "−") + (percent ? (Math.abs(value) * 100).toFixed(1) : Math.abs(value).toFixed(3));
@@ -427,14 +431,19 @@ function comparisonTable(report) {
         el("td", {}, `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to the Decisions API`, el("span", { class: "sub" }, "same items; real when the range excludes zero")),
         ...endpoints.map((e) => cell(formatPaired(report, e))),
       ),
-      report.paired_trained
-        ? el(
-            "tr",
+      ...Object.keys(report.paired_extra || {}).map((against) =>
+        el(
+          "tr",
+          {},
+          el(
+            "td",
             {},
-            el("td", {}, `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to the local baseline`, el("span", { class: "sub" }, "what 19th adds beyond training on the same labelled rows")),
-            ...endpoints.map((e) => cell(formatPaired(report, e, "local_baseline"))),
-          )
-        : null,
+            `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to ${against === "local_baseline" ? "the local baseline" : ENDPOINTS.find((e) => e.key === against).label}`,
+            el("span", { class: "sub" }, against === "local_baseline" ? "what 19th adds beyond training on the same labelled rows" : "what the slower ultra mode adds"),
+          ),
+          ...endpoints.map((e) => cell(formatPaired(report, e, against))),
+        ),
+      ),
       row("Calibration error", (s) => formatValue(s.calibration.error, "number")),
       row("Median response time", (s) => formatMs(s.latency_ms.p50)),
       row("95th-percentile response time", (s) => formatMs(s.latency_ms.p95)),

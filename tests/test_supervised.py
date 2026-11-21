@@ -205,3 +205,14 @@ def test_project_spec_declares_vectors_the_pair_and_a_typed_order():
     assert prediction["order"][3] == {"type": "integer", "value": 3}
     injection = supervised.project_spec("injection", "high", b"abc")["prediction"]
     assert injection["positive_label"] == "attack" and "pairs" not in injection
+
+
+def test_the_ultra_endpoint_uses_its_own_model(monkeypatch):
+    asked = []
+    monkeypatch.setattr(supervised, "load_model", lambda task, endpoint: asked.append(endpoint) or {"prediction_url": "u"})
+    monkeypatch.setattr(supervised, "_http_client", lambda: "http")
+    monkeypatch.setattr(supervised.nineteenth, "predict", lambda http, url, record: {"event_probability": 0.4})
+    result = supervised.nineteenth_ultra_call(FakeEmbeddings(), TASKS["injection"], {"id": "x", "text": "hi"})
+    assert asked == ["nineteenth_ultra"]
+    assert TASKS["injection"].to_prediction("nineteenth_ultra", result["raw"])["probability"] == 0.4
+    assert supervised.NINETEENTH_MODES == {"nineteenth": "high", "nineteenth_ultra": "ultra"}

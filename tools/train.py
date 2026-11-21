@@ -1,7 +1,10 @@
 """Train the 19th model and the local baseline for each task from <task>-train.jsonl.
 
-Usage: uv run python -m tools.train <intent|injection|relevance|all> [--only nineteenth|local_baseline]
-       [--mode instant|standard|high|ultra] [--dry-run] [--fresh]
+Usage: uv run python -m tools.train <intent|injection|relevance|all>
+       [--only local_baseline|nineteenth|nineteenth_ultra] [--dry-run] [--fresh]
+
+The endpoint sets 19th's training_mode: nineteenth is trained in high mode, nineteenth_ultra in ultra.
+Without --only, the local baseline and 19th in high mode are trained.
 
 Needs OPENAI_API_KEY (embeddings, cached under .tmp/embeddings/) and, for 19th, NINETEENTH_API_KEY.
 Writes .tmp/models/<task>-<endpoint>.json, which the benchmark endpoints read. Rerunning with the
@@ -73,8 +76,9 @@ def find_project(http) -> str:
     sys.exit(f"Train a single-text task first, or set {nineteenth.PROJECT_KEY_NAME} in .env, to find the 19th project.")
 
 
-def train_19th_pairs(task_name: str, csv_bytes: bytes, labels: list, mode: str, fresh: bool) -> None:
+def train_19th_pairs(task_name: str, endpoint: str, csv_bytes: bytes, labels: list, fresh: bool) -> None:
     """Two-text tasks go through the project route, the only one that accepts the embedding pair."""
+    mode = supervised.NINETEENTH_MODES[endpoint]
     spec = supervised.project_spec(task_name, mode, csv_bytes)
     key = str(uuid.uuid4()) if fresh else supervised.idempotency_key(task_name, csv_bytes, spec)
     with nineteenth.make_http() as http:
@@ -84,7 +88,7 @@ def train_19th_pairs(task_name: str, csv_bytes: bytes, labels: list, mode: str, 
         run = nineteenth.wait_for_run(http, submitted["id"], on_poll=lambda phase: print(f"  19th: {phase}", flush=True))
         seconds = time.perf_counter() - started
     supervised.MODELS.mkdir(parents=True, exist_ok=True)
-    (supervised.MODELS / f"{task_name}-nineteenth-fit.json").write_text(json.dumps(run, indent=1))
+    (supervised.MODELS / f"{task_name}-{endpoint}-fit.json").write_text(json.dumps(run, indent=1))
     phase = (run.get("status") or {}).get("phase")
     url = nineteenth.prediction_url(run)
     if phase != "Succeeded" or not url:
@@ -92,7 +96,7 @@ def train_19th_pairs(task_name: str, csv_bytes: bytes, labels: list, mode: str, 
     target = next(t for t in run["inference_targets"] if t.get("candidate_id") == "fast")
     supervised.save_model(
         task_name,
-        "nineteenth",
+        endpoint,
         {
             "run_id": run.get("id"),
             "model_id": target.get("model_id"),
@@ -110,7 +114,8 @@ def train_19th_pairs(task_name: str, csv_bytes: bytes, labels: list, mode: str, 
     print(f"  19th: ready in {seconds:.0f}s (project route, embedding pair declared)")
 
 
-def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: str, dry_run: bool, fresh: bool = False) -> None:
+def train_19th(task_name: str, endpoint: str, vectors: list[np.ndarray], labels: list, dry_run: bool, fresh: bool = False) -> None:
+    mode = supervised.NINETEENTH_MODES[endpoint]
     csv_bytes = supervised.training_csv(task_name, vectors, labels)
     request = nineteenth.fit_request(f"Benchmark {task_name} classifier", supervised.fit_spec(task_name, mode), csv_bytes)
     key = supervised.idempotency_key(task_name, csv_bytes, request)
@@ -118,7 +123,7 @@ def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: st
         key = str(uuid.uuid4())
     print(f"  19th: {len(labels):,} rows, {len(csv_bytes) / 1e6:.1f} MB CSV, training_mode={mode}")
     if supervised.uses_pairs(task_name) and not dry_run:
-        train_19th_pairs(task_name, csv_bytes, labels, mode, fresh)
+        train_19th_pairs(task_name, endpoint, csv_bytes, labels, fresh)
         return
     if dry_run:
         path = supervised.MODELS / f"{task_name}-nineteenth-train.csv"
@@ -132,7 +137,7 @@ def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: st
         result = nineteenth.wait_until_done(http, result, on_poll=lambda r: print(f"  19th: {r.get('state')}", flush=True))
         seconds = time.perf_counter() - started
     supervised.MODELS.mkdir(parents=True, exist_ok=True)
-    (supervised.MODELS / f"{task_name}-nineteenth-fit.json").write_text(json.dumps(result, indent=1))
+    (supervised.MODELS / f"{task_name}-{endpoint}-fit.json").write_text(json.dumps(result, indent=1))
     if result.get("state") != "ready":
         sys.exit(f"  19th training ended {result.get('state')}: {json.dumps(result.get('error'))}")
     model = result.get("model") or {}
@@ -142,7 +147,7 @@ def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: st
     download = model.get("download") or {}
     supervised.save_model(
         task_name,
-        "nineteenth",
+        endpoint,
         {
             "run_id": result.get("run_id"),
             "model_id": model.get("model_id"),
@@ -163,8 +168,7 @@ def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: st
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("task", choices=[*TASKS, "all"])
-    parser.add_argument("--only", choices=["nineteenth", "local_baseline"])
-    parser.add_argument("--mode", default="high", choices=["instant", "standard", "high", "ultra"])
+    parser.add_argument("--only", choices=["local_baseline", *supervised.NINETEENTH_MODES])
     parser.add_argument("--dry-run", action="store_true", help="write the 19th CSV and request instead of uploading")
     parser.add_argument("--fresh", action="store_true", help="start a new 19th run instead of recovering a matching one")
     args = parser.parse_args()
@@ -180,8 +184,9 @@ def main() -> None:
         labels = [row["label"] for row in rows]
         if args.only in (None, "local_baseline"):
             train_baseline(name, vectors, labels)
-        if args.only in (None, "nineteenth"):
-            train_19th(name, vectors, labels, args.mode, args.dry_run, args.fresh)
+        for endpoint in supervised.NINETEENTH_MODES:
+            if args.only == endpoint or (args.only is None and endpoint == "nineteenth"):
+                train_19th(name, endpoint, vectors, labels, args.dry_run, args.fresh)
 
 
 if __name__ == "__main__":

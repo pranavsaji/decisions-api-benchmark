@@ -28,7 +28,7 @@ class Task:
 
 
 # Endpoints that answer from a model trained on labelled examples (see bench/supervised.py).
-TRAINED = ("nineteenth", "local_baseline")
+TRAINED = ("nineteenth", "nineteenth_ultra", "local_baseline")
 
 
 def blank(status: str) -> dict:

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-21T02:54:29+00:00",
+ "generated_at": "2026-11-21T03:23:34+00:00",
  "model": "gpt-6-luna",
  "prices": {
   "per_million": {
@@ -129,9 +129,48 @@
     "baseline": "local_baseline",
     "n": 770
    },
-   "p50_ms": 267.0,
-   "embed_p50_ms": 184.0,
-   "p95_ms": 376.54999999999995,
+   "p50_ms": 272.0,
+   "embed_p50_ms": 188.0,
+   "p95_ms": 435.7499999999998,
+   "cost_per_1000": 0.0002510909090909091,
+   "answered": 770,
+   "planned": 770
+  },
+  {
+   "task": "intent",
+   "title": "Intent routing",
+   "endpoint": "nineteenth_ultra",
+   "headline": {
+    "label": "Top-1 accuracy",
+    "value": 0.9402597402597402,
+    "ci": [
+     0.9212328416596196,
+     0.9549154553562038
+    ],
+    "n": 770,
+    "format": "percent"
+   },
+   "paired": {
+    "difference": 0.15994798439531865,
+    "ci": [
+     0.13133940182054615,
+     0.18985695708712613
+    ],
+    "baseline": "decisions",
+    "n": 769
+   },
+   "paired_trained": {
+    "difference": -0.007792207792207795,
+    "ci": [
+     -0.018181818181818188,
+     0.0025974025974025983
+    ],
+    "baseline": "local_baseline",
+    "n": 770
+   },
+   "p50_ms": 275.0,
+   "embed_p50_ms": 187.0,
+   "p95_ms": 437.2999999999997,
    "cost_per_1000": 0.0002510909090909091,
    "answered": 770,
    "planned": 770
@@ -160,9 +199,9 @@
     "n": 769
    },
    "paired_trained": null,
-   "p50_ms": 184.0,
-   "embed_p50_ms": 184.0,
-   "p95_ms": 261.0,
+   "p50_ms": 189.0,
+   "embed_p50_ms": 189.0,
+   "p95_ms": 322.0999999999999,
    "cost_per_1000": 0.0002510909090909091,
    "answered": 770,
    "planned": 770
@@ -258,19 +297,58 @@
    "endpoint": "nineteenth",
    "headline": {
     "label": "AUC",
-    "value": 0.9761,
+    "value": 0.9761111111111112,
     "ci": [
-     0.9655400052446286,
-     0.9849416359293883
+     0.9655608526608633,
+     0.9849852853450821
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": 0.08634444444444445,
+    "difference": 0.08635555555555563,
     "ci": [
-     0.06418365366796294,
-     0.11072097590433964
+     0.06416143018010109,
+     0.11072208732417849
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "paired_trained": {
+    "difference": 0.00477777777777777,
+    "ci": [
+     -0.0022019618796532054,
+     0.012199205718399666
+    ],
+    "baseline": "local_baseline",
+    "n": 600
+   },
+   "p50_ms": 269.5,
+   "embed_p50_ms": 184.0,
+   "p95_ms": 372.14999999999986,
+   "cost_per_1000": 0.002445266666666667,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "injection",
+   "title": "Injection guardrail",
+   "endpoint": "nineteenth_ultra",
+   "headline": {
+    "label": "AUC",
+    "value": 0.9761333333333333,
+    "ci": [
+     0.966304242748134,
+     0.9846563557626901
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": 0.08637777777777778,
+    "ci": [
+     0.06397882938978827,
+     0.11047180432865648
     ],
     "baseline": "decisions",
     "n": 600
@@ -278,15 +356,15 @@
    "paired_trained": {
     "difference": 0.0047999999999999154,
     "ci": [
-     -0.0021687407182923806,
-     0.012275129642828612
+     -0.00221153377513216,
+     0.012571534952997341
     ],
     "baseline": "local_baseline",
     "n": 600
    },
-   "p50_ms": 268.0,
+   "p50_ms": 269.0,
    "embed_p50_ms": 185.0,
-   "p95_ms": 380.3499999999997,
+   "p95_ms": 377.14999999999986,
    "cost_per_1000": 0.002445266666666667,
    "answered": 600,
    "planned": 600
@@ -297,27 +375,27 @@
    "endpoint": "local_baseline",
    "headline": {
     "label": "AUC",
-    "value": 0.9713,
+    "value": 0.9713333333333334,
     "ci": [
-     0.9586708016614264,
-     0.9821373536436593
+     0.9587165185649942,
+     0.9821715400276363
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": 0.08154444444444453,
+    "difference": 0.08157777777777786,
     "ci": [
-     0.058470839910576326,
-     0.10590596520267563
+     0.058471673475455455,
+     0.1059938386676819
     ],
     "baseline": "decisions",
     "n": 600
    },
    "paired_trained": null,
-   "p50_ms": 184.0,
-   "embed_p50_ms": 184.0,
-   "p95_ms": 247.0,
+   "p50_ms": 185.0,
+   "embed_p50_ms": 185.0,
+   "p95_ms": 260.0,
    "cost_per_1000": 0.002445266666666667,
    "answered": 600,
    "planned": 600
@@ -413,35 +491,74 @@
    "endpoint": "nineteenth",
    "headline": {
     "label": "Agreement with human grades (weighted kappa)",
-    "value": 0.40703971119133564,
+    "value": 0.4097472924187726,
     "ci": [
-     0.34538830397320397,
-     0.46575754968135835
+     0.34739430381560993,
+     0.4672095482124145
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": -0.17433744060835132,
+    "difference": -0.17162985938091435,
     "ci": [
-     -0.23793296408669942,
-     -0.10570610580250175
+     -0.2367048863556088,
+     -0.1041295718744822
     ],
     "baseline": "decisions",
     "n": 600
    },
    "paired_trained": {
-    "difference": 0.11028160645318108,
+    "difference": 0.11361262907712677,
     "ci": [
-     0.058935172435897264,
-     0.16359525917665113
+     0.061937362598206314,
+     0.16591241555980707
     ],
     "baseline": "local_baseline",
     "n": 600
    },
-   "p50_ms": 281.0,
-   "embed_p50_ms": 189.0,
-   "p95_ms": 406.0999999999999,
+   "p50_ms": 290.0,
+   "embed_p50_ms": 196.0,
+   "p95_ms": 423.04999999999995,
+   "cost_per_1000": 0.0017795666666666668,
+   "answered": 600,
+   "planned": 600
+  },
+  {
+   "task": "relevance",
+   "title": "Search relevance",
+   "endpoint": "nineteenth_ultra",
+   "headline": {
+    "label": "Agreement with human grades (weighted kappa)",
+    "value": 0.4571678321678321,
+    "ci": [
+     0.4008885027438723,
+     0.5164755297690246
+    ],
+    "n": 600,
+    "format": "number"
+   },
+   "paired": {
+    "difference": -0.12420931963185489,
+    "ci": [
+     -0.18244385225284832,
+     -0.05453387386867551
+    ],
+    "baseline": "decisions",
+    "n": 600
+   },
+   "paired_trained": {
+    "difference": 0.16103316882618623,
+    "ci": [
+     0.10796100106856578,
+     0.21195767995875664
+    ],
+    "baseline": "local_baseline",
+    "n": 600
+   },
+   "p50_ms": 292.0,
+   "embed_p50_ms": 195.0,
+   "p95_ms": 437.1999999999998,
    "cost_per_1000": 0.0017795666666666668,
    "answered": 600,
    "planned": 600
@@ -452,27 +569,27 @@
    "endpoint": "local_baseline",
    "headline": {
     "label": "Agreement with human grades (weighted kappa)",
-    "value": 0.29675810473815456,
+    "value": 0.29613466334164584,
     "ci": [
-     0.2386833544056984,
-     0.36076203397915635
+     0.23841480184567726,
+     0.35944055938364644
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": -0.2846190470615324,
+    "difference": -0.2852424884580411,
     "ci": [
-     -0.34970466127543187,
-     -0.2155410595818568
+     -0.35022342052842864,
+     -0.2172014505603672
     ],
     "baseline": "decisions",
     "n": 600
    },
    "paired_trained": null,
-   "p50_ms": 188.0,
-   "embed_p50_ms": 188.0,
-   "p95_ms": 261.0999999999999,
+   "p50_ms": 193.5,
+   "embed_p50_ms": 193.0,
+   "p95_ms": 276.04999999999995,
    "cost_per_1000": 0.0017795666666666668,
    "answered": 600,
    "planned": 600

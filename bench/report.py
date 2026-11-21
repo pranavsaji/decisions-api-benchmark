@@ -19,9 +19,13 @@ ENDPOINT_TITLES = {
     "decisions": "Decisions API",
     "responses_default": "Responses API, default",
     "responses_tuned": "Responses API, tuned",
-    "nineteenth": "19th",
+    "nineteenth": "19th, high",
+    "nineteenth_ultra": "19th, ultra",
     "local_baseline": "Local baseline",
 }
+# Extra same-items comparisons: each 19th mode against the local baseline (what 19th adds beyond
+# having labels), and ultra against high (what the slower mode adds). (endpoint, baseline) pairs.
+EXTRA_COMPARISONS = [("nineteenth", "local_baseline"), ("nineteenth_ultra", "local_baseline"), ("nineteenth_ultra", "nineteenth")]
 # Model details safe to publish: no prediction URL or request key.
 TRAINING_FIELDS = ("rows", "training_mode", "model_variant", "route", "wall_seconds", "model_bytes", "C", "train_seconds")
 
@@ -121,6 +125,15 @@ def training_details(task_name: str, endpoints: list[str]) -> dict:
     return details
 
 
+def extra_comparisons(task, items: list[dict], answers: dict, names: list[str]) -> dict:
+    """{baseline: {endpoint: comparison}} for every EXTRA_COMPARISONS pair that both sides ran."""
+    found: dict[str, dict] = {}
+    for endpoint, baseline in EXTRA_COMPARISONS:
+        if endpoint in names and baseline in names:
+            found.setdefault(baseline, {})[endpoint] = paired_comparison(task, items, answers, endpoint, baseline=baseline)
+    return found
+
+
 def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None) -> dict:
     names = reported_endpoints(cache)
     endpoints = {}
@@ -147,12 +160,7 @@ def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None
         "headline": task.headline,
         "endpoints": endpoints,
         "paired": {name: paired_comparison(task, items, answers, name) for name in names if name != "decisions"},
-        # 19th against the plain model trained on the same rows: what 19th adds beyond having labels.
-        "paired_trained": (
-            paired_comparison(task, items, answers, "nineteenth", baseline="local_baseline")
-            if all(name in names for name in TRAINED)
-            else None
-        ),
+        "paired_extra": extra_comparisons(task, items, answers, names),
         "training": training_details(task.name, names),
         "embedding_model": embeddings.MODEL if any(name in TRAINED for name in names) else None,
         "cases": cases,
@@ -170,7 +178,7 @@ def build_summary(reports: list[dict]) -> dict:
                     "endpoint": endpoint,
                     "headline": summary["metrics"][built["headline"]],
                     "paired": built["paired"].get(endpoint),
-                    "paired_trained": built.get("paired_trained") if endpoint == "nineteenth" else None,
+                    "paired_trained": (built.get("paired_extra") or {}).get("local_baseline", {}).get(endpoint),
                     "p50_ms": summary["latency_ms"]["p50"],
                     "embed_p50_ms": summary["latency_ms"].get("embed_p50"),
                     "p95_ms": summary["latency_ms"]["p95"],
@@ -253,10 +261,11 @@ def markdown(built: dict) -> str:
         + " | ".join(paired(name) for name in names)
         + " |"
     )
-    if built.get("paired_trained"):
-        cells = {"local_baseline": "baseline", "nineteenth": difference(built["paired_trained"])}
+    for baseline, compared in (built.get("paired_extra") or {}).items():
+        cells = {baseline: "baseline", **{name: difference(value) for name, value in compared.items()}}
+        title = "the local baseline" if baseline == "local_baseline" else ENDPOINT_TITLES[baseline]
         lines.append(
-            f"| {headline['label']}, difference from the local baseline on the same items | "
+            f"| {headline['label']}, difference from {title} on the same items | "
             + " | ".join(cells.get(name, "") for name in names)
             + " |"
         )
