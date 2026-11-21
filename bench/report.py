@@ -23,7 +23,7 @@ ENDPOINT_TITLES = {
     "local_baseline": "Local baseline",
 }
 # Model details safe to publish: no prediction URL or request key.
-TRAINING_FIELDS = ("rows", "training_mode", "model_variant", "wall_seconds", "model_bytes", "C", "train_seconds")
+TRAINING_FIELDS = ("rows", "training_mode", "model_variant", "route", "wall_seconds", "model_bytes", "C", "train_seconds")
 
 
 def _mean(values: list) -> float | None:
@@ -170,7 +170,9 @@ def build_summary(reports: list[dict]) -> dict:
                     "endpoint": endpoint,
                     "headline": summary["metrics"][built["headline"]],
                     "paired": built["paired"].get(endpoint),
+                    "paired_trained": built.get("paired_trained") if endpoint == "nineteenth" else None,
                     "p50_ms": summary["latency_ms"]["p50"],
+                    "embed_p50_ms": summary["latency_ms"].get("embed_p50"),
                     "p95_ms": summary["latency_ms"]["p95"],
                     "cost_per_1000": summary["cost_per_1000"],
                     "answered": summary["counts"]["answered"],

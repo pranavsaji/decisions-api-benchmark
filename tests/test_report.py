@@ -199,3 +199,11 @@ def test_19th_is_compared_with_the_local_baseline_on_the_same_items():
     (row,) = [line for line in lines if "difference from the local baseline" in line]
     cells = [cell.strip() for cell in row.strip("|").split("|")]
     assert cells[-1] == "baseline" and cells[-2].startswith("+0.250 (")
+
+
+def test_summary_carries_19th_against_the_baseline_and_its_embedding_time():
+    summary = report.build_summary([report.build_task_report(TASK, ITEMS, trained_cache(), None)])
+    by_endpoint = {row["endpoint"]: row for row in summary["rows"]}
+    assert by_endpoint["nineteenth"]["paired_trained"]["difference"] == pytest.approx(0.25)
+    assert by_endpoint["local_baseline"]["paired_trained"] is None
+    assert by_endpoint["nineteenth"]["embed_p50_ms"] == 50 and by_endpoint["decisions"]["embed_p50_ms"] is None

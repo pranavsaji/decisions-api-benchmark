@@ -163,6 +163,49 @@ function heroStats(summary) {
   );
 }
 
+// 19th's place among the endpoints: against the no-examples ones, against a plain model trained on
+// the same rows, and its speed. Shown once 19th has results.
+function trainedStats(summary) {
+  const NO_EXAMPLES = ["decisions", "responses_default", "responses_tuned"];
+  const tasks = state.tasks
+    .map((task) => [task, Object.fromEntries(summary.rows.filter((row) => row.task === task.name).map((row) => [row.endpoint, row]))])
+    .filter(([, rows]) => rows.nineteenth && rows.nineteenth.headline.value != null);
+  if (!tasks.length) return null;
+  const above = tasks.filter(([, rows]) => NO_EXAMPLES.every((key) => !rows[key] || rows[key].headline.value == null || rows.nineteenth.headline.value > rows[key].headline.value));
+  const below = tasks.filter(([task]) => !above.some(([t]) => t.name === task.name)).map(([task]) => task.title.toLowerCase());
+  // paired_trained is 19th minus the local baseline on the same items.
+  const against = tasks.map(([, rows]) => rows.nineteenth.paired_trained).filter((p) => p && p.ci);
+  const ahead = against.filter((p) => p.ci[0] > 0).length, behind = against.filter((p) => p.ci[1] < 0).length;
+  const level = against.length - ahead - behind;
+  const slower = range(tasks.map(([, rows]) => (rows.decisions && rows.decisions.p50_ms ? rows.nineteenth.p50_ms / rows.decisions.p50_ms : null)), "×");
+  const embed = range(tasks.map(([, rows]) => rows.nineteenth.embed_p50_ms), " ms");
+  return [
+    el("p", { class: "stats-label" }, "19th, trained on labelled examples"),
+    el(
+      "div",
+      { class: "stats" },
+      statCard(
+        "Against no-examples endpoints",
+        `${above.length} of ${tasks.length}`,
+        above.length ? "good" : "bad",
+        `tasks where 19th scores above all three OpenAI endpoints${below.length ? `. Below them on ${below.join(" and ")}` : ""}.`,
+      ),
+      statCard(
+        "Against a plain baseline",
+        against.length ? `${ahead} of ${against.length}` : null,
+        ahead ? "good" : behind ? "bad" : null,
+        `tasks where it beats a logistic regression trained on the same rows and inputs, on the same items. Level on ${level}, behind on ${behind}.`,
+      ),
+      statCard(
+        "Speed",
+        range(tasks.map(([, rows]) => rows.nineteenth.p50_ms), " ms"),
+        null,
+        `median per decision, ${slower || "an unknown multiple"} the Decisions API's. Most of it is the ${embed || ""} embedding call before 19th's hosted prediction.`,
+      ),
+    ),
+  ];
+}
+
 function barRow(endpoint, share, text) {
   return el(
     "div",
@@ -257,6 +300,7 @@ async function renderSummary() {
           "Where they have run, two models trained on labelled examples join them: 19th, and a plain logistic regression on the same inputs.",
       ),
       heroStats(summary),
+      trainedStats(summary),
     ),
     el("h2", {}, "Use cases"),
     el("p", { class: "note" }, "One task per Decisions question type. Bars show the headline quality metric and the median response time."),
@@ -337,7 +381,7 @@ function trainingNote(report) {
   const training = report.dataset && report.dataset.training;
   if (!trained.length || !training) return null;
   const rows = training.counts ? training.counts.total.toLocaleString() : "the";
-  const names = trained.map((e) => e.label).join(" and ");
+  const names = trained.map((e, i) => (e.key === "local_baseline" ? (i ? "the local baseline" : "The local baseline") : e.label)).join(" and ");
   return el(
     "p",
     { class: "note" },
