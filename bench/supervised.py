@@ -9,6 +9,7 @@ Every answer is reduced to one shape that the task parsers read:
 For 19th, the cached raw answer keeps 19th's own `output` object and is reduced at report time.
 """
 import csv
+import hashlib
 import io
 import json
 import threading
@@ -93,9 +94,6 @@ def training_csv(task_name: str, vectors: list[np.ndarray], labels: list) -> byt
 
 def fit_spec(task_name: str, mode: str) -> dict:
     chosen = spec(task_name)
-    # Relevance sends the query and passage embeddings as two separate inputs. /v1/fit refuses the
-    # `pairs` field that would let 19th compare them, and adding a similarity column made 19th fail to
-    # serve the model (404 "model not found", DOWNLOAD_UNAVAILABLE, twice on 2026-11-20).
     columns = [column(key) for key in chosen.texts]
     result = {
         "target_column": "label",
@@ -105,6 +103,45 @@ def fit_spec(task_name: str, mode: str) -> dict:
         **chosen.extra,
     }
     return result
+
+
+TASK_KINDS = {"multiclass_label": ("multiclass", "class_label"), "event_probability": ("binary", "event_probability"),
+              "ordered_class": ("ordinal", "ordered_class")}
+
+
+def uses_pairs(task_name: str) -> bool:
+    """Tasks with two texts are trained with a declared embedding pair, which only the project route accepts.
+
+    On /v1/fit, which refuses `pairs`, 19th learned almost nothing about relevance (weighted kappa 0.080
+    on 2026-11-20), and adding a similarity column made 19th fail to serve the model.
+    """
+    return len(spec(task_name).texts) == 2
+
+
+def project_spec(task_name: str, mode: str, csv_bytes: bytes) -> dict:
+    """The upload spec for 19th's project route: explicit task, vector column types and the pair."""
+    chosen = spec(task_name)
+    columns = [column(key) for key in chosen.texts]
+    task, output_kind = TASK_KINDS[chosen.output_kind]
+    prediction = {
+        "task": task,
+        "target_column": "label",
+        "input_columns": columns,
+        "output_kind": output_kind,
+        "column_types": {name: "vector" for name in columns},
+    }
+    if len(columns) == 2:
+        prediction["pairs"] = [columns]
+    if "order" in chosen.extra:
+        prediction["order"] = [{"type": "integer", "value": value} for value in chosen.extra["order"]]
+    if "positive_label" in chosen.extra:
+        prediction["positive_label"] = chosen.extra["positive_label"]
+    return {
+        "file": {"content_length": len(csv_bytes), "sha256": hashlib.sha256(csv_bytes).hexdigest()},
+        "prediction": prediction,
+        "training_mode": mode,
+        "run_name": f"Benchmark {task_name} with pairs"[:80],
+    }
 
 
 def record(task_name: str, vectors: np.ndarray) -> dict:

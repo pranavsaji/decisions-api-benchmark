@@ -1,3 +1,4 @@
+import hashlib
 import json
 import csv
 import io
@@ -186,3 +187,21 @@ def test_the_idempotency_key_ignores_wait_and_inline_but_not_the_data():
     key = supervised.idempotency_key("intent", b"", request)
     assert key == supervised.idempotency_key("intent", b"", {**request, "wait": False})
     assert key != supervised.idempotency_key("intent", b"", {**request, "file": {"sha256": "b"}})
+
+
+def test_only_two_text_tasks_use_the_pair_route():
+    assert supervised.uses_pairs("relevance")
+    assert not supervised.uses_pairs("intent") and not supervised.uses_pairs("injection")
+
+
+def test_project_spec_declares_vectors_the_pair_and_a_typed_order():
+    spec = supervised.project_spec("relevance", "high", b"abc")
+    assert spec["file"] == {"content_length": 3, "sha256": hashlib.sha256(b"abc").hexdigest()}
+    assert (spec["training_mode"], spec["run_name"]) == ("high", "Benchmark relevance with pairs")
+    prediction = spec["prediction"]
+    assert (prediction["task"], prediction["output_kind"]) == ("ordinal", "ordered_class")
+    assert prediction["column_types"] == {"query_embedding": "vector", "passage_embedding": "vector"}
+    assert prediction["pairs"] == [["query_embedding", "passage_embedding"]]
+    assert prediction["order"][3] == {"type": "integer", "value": 3}
+    injection = supervised.project_spec("injection", "high", b"abc")["prediction"]
+    assert injection["positive_label"] == "attack" and "pairs" not in injection

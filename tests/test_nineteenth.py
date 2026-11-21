@@ -79,3 +79,32 @@ def test_a_missing_key_is_a_fatal_error_naming_the_variable(monkeypatch):
     with pytest.raises(nineteenth.NineteenthError, match="NINETEENTH_API_KEY") as caught:
         nineteenth.api_key()
     assert caught.value.fatal
+
+
+def test_project_of_run_reads_the_project_ref():
+    client = http(lambda request: httpx.Response(200, json={"data": {"id": "r1", "project_ref": "p1"}}))
+    assert nineteenth.project_of_run(client, "r1") == "p1"
+
+
+def test_upload_and_train_posts_spec_then_csv_to_the_project_route():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = request.read()
+        seen.update(url=str(request.url), key=request.headers["Idempotency-Key"])
+        seen["order"] = (body.index(b'name="spec"'), body.index(b'name="file"'))
+        return httpx.Response(202, json={"data": {"id": "job1", "status": {"phase": "Pending"}}})
+
+    result = nineteenth.upload_and_train(http(handler), "p1", {"run_name": "x"}, b"a\n1\n", "k1")
+    assert result["id"] == "job1" and seen["key"] == "k1"
+    assert seen["url"] == "https://training.19th.com/v1/projects/p1/training-runs/upload"
+    assert seen["order"][0] < seen["order"][1]
+
+
+def test_wait_for_run_returns_the_finished_run_and_its_fast_prediction_url():
+    phases = iter(["Pending", "Running", "Succeeded"])
+    targets = [{"candidate_id": "turbo", "predict_url": "t"}, {"candidate_id": "fast", "predict_url": "f"}]
+    client = http(lambda request: httpx.Response(200, json={"data": {"status": {"phase": next(phases)}, "inference_targets": targets}}))
+    run = nineteenth.wait_for_run(client, "job1", pause=0)
+    assert run["status"]["phase"] == "Succeeded"
+    assert nineteenth.prediction_url(run) == "f" and nineteenth.prediction_url({}) is None

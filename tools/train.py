@@ -12,6 +12,7 @@ hosted model 19th failed to serve).
 """
 import argparse
 import json
+import os
 import sys
 import time
 import uuid
@@ -61,6 +62,54 @@ def train_baseline(task_name: str, vectors: list[np.ndarray], labels: list) -> N
     print(f"  local baseline: C={stats['C']}, {stats['train_seconds']}s")
 
 
+def find_project(http) -> str:
+    project = os.environ.get(nineteenth.PROJECT_KEY_NAME, "").strip()
+    if project:
+        return project
+    for path in sorted(supervised.MODELS.glob("*-nineteenth.json")):
+        run_id = json.loads(path.read_text()).get("run_id")
+        if run_id:
+            return nineteenth.project_of_run(http, run_id)
+    sys.exit(f"Train a single-text task first, or set {nineteenth.PROJECT_KEY_NAME} in .env, to find the 19th project.")
+
+
+def train_19th_pairs(task_name: str, csv_bytes: bytes, labels: list, mode: str, fresh: bool) -> None:
+    """Two-text tasks go through the project route, the only one that accepts the embedding pair."""
+    spec = supervised.project_spec(task_name, mode, csv_bytes)
+    key = str(uuid.uuid4()) if fresh else supervised.idempotency_key(task_name, csv_bytes, spec)
+    with nineteenth.make_http() as http:
+        project = find_project(http)
+        started = time.perf_counter()
+        submitted = nineteenth.upload_and_train(http, project, spec, csv_bytes, key)
+        run = nineteenth.wait_for_run(http, submitted["id"], on_poll=lambda phase: print(f"  19th: {phase}", flush=True))
+        seconds = time.perf_counter() - started
+    supervised.MODELS.mkdir(parents=True, exist_ok=True)
+    (supervised.MODELS / f"{task_name}-nineteenth-fit.json").write_text(json.dumps(run, indent=1))
+    phase = (run.get("status") or {}).get("phase")
+    url = nineteenth.prediction_url(run)
+    if phase != "Succeeded" or not url:
+        sys.exit(f"  19th training ended {phase} with prediction URL {'present' if url else 'missing'}")
+    target = next(t for t in run["inference_targets"] if t.get("candidate_id") == "fast")
+    supervised.save_model(
+        task_name,
+        "nineteenth",
+        {
+            "run_id": run.get("id"),
+            "model_id": target.get("model_id"),
+            "model_version_id": target.get("model_version_id"),
+            "prediction_url": url,
+            "training_mode": mode,
+            "model_variant": "fast",
+            "route": "project upload with pairs",
+            "rows": len(labels),
+            "csv_bytes": len(csv_bytes),
+            "wall_seconds": round(seconds, 1),
+            "idempotency_key": key,
+        },
+    )
+    print(f"  19th: ready in {seconds:.0f}s (project route, embedding pair declared)")
+
+
 def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: str, dry_run: bool, fresh: bool = False) -> None:
     csv_bytes = supervised.training_csv(task_name, vectors, labels)
     request = nineteenth.fit_request(f"Benchmark {task_name} classifier", supervised.fit_spec(task_name, mode), csv_bytes)
@@ -68,6 +117,9 @@ def train_19th(task_name: str, vectors: list[np.ndarray], labels: list, mode: st
     if fresh:
         key = str(uuid.uuid4())
     print(f"  19th: {len(labels):,} rows, {len(csv_bytes) / 1e6:.1f} MB CSV, training_mode={mode}")
+    if supervised.uses_pairs(task_name) and not dry_run:
+        train_19th_pairs(task_name, csv_bytes, labels, mode, fresh)
+        return
     if dry_run:
         path = supervised.MODELS / f"{task_name}-nineteenth-train.csv"
         path.write_bytes(csv_bytes)

@@ -14,6 +14,8 @@ import httpx
 TRAINING_ORIGIN = "https://training.19th.com"
 KEY_NAME = "NINETEENTH_API_KEY"
 TERMINAL = {"ready", "failed", "cancelled"}
+PROJECT_KEY_NAME = "NINETEENTH_PROJECT_ID"
+RUN_DONE = {"Succeeded", "Failed", "Cancelled", "Canceled"}
 
 
 class NineteenthError(Exception):
@@ -96,6 +98,53 @@ def wait_until_done(http: httpx.Client, result: dict, on_poll=None, limit_second
         response = http.get(f"{TRAINING_ORIGIN}{result['status_url']}&wait_seconds=60", timeout=120)
         result = _json(response)
     return result
+
+
+def project_of_run(http: httpx.Client, run_id: str) -> str:
+    """The key's project UUID, read from one of its training runs (19th lists no projects over REST)."""
+    data = _json(http.get(f"{TRAINING_ORIGIN}/v1/training-runs/{run_id}"))
+    data = data.get("data", data)
+    project = data.get("project_ref") or (data.get("spec") or {}).get("project_ref")
+    if not project:
+        raise NineteenthError(f"training run {run_id} names no project; set {PROJECT_KEY_NAME} in .env")
+    return project
+
+
+def upload_and_train(http: httpx.Client, project: str, spec: dict, csv_bytes: bytes, idempotency_key: str) -> dict:
+    """The project route. Unlike /v1/fit it accepts column_types and pairs for embedding columns."""
+    response = http.post(
+        f"{TRAINING_ORIGIN}/v1/projects/{project}/training-runs/upload",
+        headers={"Idempotency-Key": idempotency_key},
+        files=[
+            ("spec", (None, json.dumps(spec), "application/json")),
+            ("file", ("train.csv", csv_bytes, "text/csv")),
+        ],
+        timeout=300,
+    )
+    body = _json(response)
+    return body.get("data", body)
+
+
+def wait_for_run(http: httpx.Client, run_id: str, on_poll=None, limit_seconds: float = 3600, pause: float = 10) -> dict:
+    started = time.monotonic()
+    while True:
+        data = _json(http.get(f"{TRAINING_ORIGIN}/v1/training-runs/{run_id}"))
+        data = data.get("data", data)
+        phase = (data.get("status") or {}).get("phase")
+        if phase in RUN_DONE:
+            return data
+        if time.monotonic() - started > limit_seconds:
+            raise NineteenthError(f"training run {run_id} still {phase} after {limit_seconds}s")
+        if on_poll:
+            on_poll(phase)
+        time.sleep(pause)
+
+
+def prediction_url(run: dict, variant: str = "fast") -> str | None:
+    for target in run.get("inference_targets") or []:
+        if target.get("candidate_id") == variant:
+            return target.get("predict_url")
+    return None
 
 
 def predict(http: httpx.Client, url: str, record: dict) -> dict:
