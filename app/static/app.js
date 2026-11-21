@@ -2,6 +2,8 @@ const ENDPOINTS = [
   { key: "decisions", label: "Decisions API", short: "Decisions", color: "var(--c-decisions)" },
   { key: "responses_default", label: "Responses API, default", short: "Responses, default", color: "var(--c-default)" },
   { key: "responses_tuned", label: "Responses API, tuned", short: "Responses, tuned", color: "var(--c-tuned)" },
+  { key: "nineteenth", label: "19th", short: "19th", color: "var(--c-nineteenth)", trained: true },
+  { key: "local_baseline", label: "Local baseline", short: "Local baseline", color: "var(--c-baseline)", trained: true },
 ];
 // What each task stands for in a product. Keyed by task name; a task without an entry shows none.
 const USE_CASES = {
@@ -54,7 +56,7 @@ const NO_DATA = "no data";
 const formatValue = (value, format) =>
   value == null ? NO_DATA : format === "percent" ? (value * 100).toFixed(1) + "%" : value.toFixed(3);
 const formatMs = (value) => (value == null ? NO_DATA : Math.round(value).toLocaleString() + " ms");
-const formatCost = (value) => (value == null ? NO_DATA : "$" + value.toFixed(3));
+const formatCost = (value) => (value == null ? NO_DATA : "$" + value.toFixed(value < 0.001 ? 4 : 3));
 
 function formatMetric(metric) {
   if (!metric || metric.value == null) return NO_DATA;
@@ -251,7 +253,8 @@ async function renderSummary() {
       el(
         "p",
         { class: "lede" },
-        "Three jobs it should be best at, each asked three ways of the same model: typed decisions, the Responses API, and the Responses API with reasoning off.",
+        "Three jobs it should be best at, each asked three ways of the same model: typed decisions, the Responses API, and the Responses API with reasoning off. " +
+          "Where they have run, two models trained on labelled examples join them: 19th, and a plain logistic regression on the same inputs.",
       ),
       heroStats(summary),
     ),
@@ -274,7 +277,11 @@ async function renderSummary() {
       { class: "note" },
       `Ranges are 95% intervals. Cost uses reported token counts at $${prices.input.toFixed(2)} input, ` +
         `$${prices.cached_input.toFixed(2)} cached input and $${prices.output.toFixed(2)} output per million tokens ` +
-        `(read ${summary.prices.read_on}). The Decisions API bills input tokens only.`,
+        `(read ${summary.prices.read_on}). The Decisions API bills input tokens only.` +
+        (summary.rows.some((row) => row.endpoint === "nineteenth" || row.endpoint === "local_baseline")
+          ? ` For 19th and the local baseline, cost covers the ${summary.prices.embedding_model} call only ` +
+            `($${summary.prices.embedding_per_million.toFixed(2)} per million tokens); 19th publishes no prices during its alpha.`
+          : ""),
     ),
   ];
 }
@@ -310,6 +317,7 @@ async function renderTask(name) {
     ...intro,
     el("h2", {}, "Results"),
     el("p", { class: "note" }, dataset),
+    trainingNote(report),
     el("div", { class: "panel scroll" }, comparisonTable(report)),
     el(
       "div",
@@ -324,13 +332,29 @@ async function renderTask(name) {
   ];
 }
 
+function trainingNote(report) {
+  const trained = presentEndpoints(report).filter((e) => e.trained);
+  const training = report.dataset && report.dataset.training;
+  if (!trained.length || !training) return null;
+  const rows = training.counts ? training.counts.total.toLocaleString() : "the";
+  const names = trained.map((e) => e.label).join(" and ");
+  return el(
+    "p",
+    { class: "note" },
+    `${names} learned from ${rows} labelled examples: ${training.name}. ${training.sampling} ` +
+      `Each text reaches them as a ${report.embedding_model} embedding, and their response time includes that live embedding call. ` +
+      "The other endpoints see no examples.",
+  );
+}
+
 function legend(report) {
   return el("div", { class: "legend" }, ...presentEndpoints(report).map((e) => el("span", {}, swatch(e), e.label)));
 }
 
-function formatPaired(report, endpoint) {
-  if (endpoint.key === "decisions") return "baseline";
-  const paired = (report.paired || {})[endpoint.key];
+function formatPaired(report, endpoint, against = "decisions") {
+  if (endpoint.key === against) return "baseline";
+  if (against !== "decisions" && endpoint.key !== "nineteenth") return "";
+  const paired = against === "decisions" ? (report.paired || {})[endpoint.key] : report.paired_trained;
   if (!paired || !paired.ci) return NO_DATA;
   const percent = report.endpoints[endpoint.key].metrics[report.headline].format === "percent";
   const show = (value) => (value >= 0 ? "+" : "−") + (percent ? (Math.abs(value) * 100).toFixed(1) : Math.abs(value).toFixed(3));
@@ -359,9 +383,20 @@ function comparisonTable(report) {
         el("td", {}, `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to the Decisions API`, el("span", { class: "sub" }, "same items; real when the range excludes zero")),
         ...endpoints.map((e) => cell(formatPaired(report, e))),
       ),
+      report.paired_trained
+        ? el(
+            "tr",
+            {},
+            el("td", {}, `${report.endpoints[endpoints[0].key].metrics[report.headline].label}, gap to the local baseline`, el("span", { class: "sub" }, "what 19th adds beyond training on the same labelled rows")),
+            ...endpoints.map((e) => cell(formatPaired(report, e, "local_baseline"))),
+          )
+        : null,
       row("Calibration error", (s) => formatValue(s.calibration.error, "number")),
       row("Median response time", (s) => formatMs(s.latency_ms.p50)),
       row("95th-percentile response time", (s) => formatMs(s.latency_ms.p95)),
+      endpoints.some((e) => e.trained)
+        ? row("Median time: embedding, then model", (s) => (s.latency_ms.embed_p50 == null ? "" : `${formatMs(s.latency_ms.embed_p50)} + ${formatMs(s.latency_ms.predict_p50)}`))
+        : null,
       row("Mean input tokens", (s) => (s.tokens.input == null ? NO_DATA : Math.round(s.tokens.input).toLocaleString())),
       row("Mean output tokens", (s) => (s.tokens.output == null ? NO_DATA : Math.round(s.tokens.output).toLocaleString())),
       row("Cost per 1,000 decisions", (s) => formatCost(s.cost_per_1000)),
@@ -541,7 +576,7 @@ function playground(task) {
   const inputs = Object.fromEntries(task.fields.map(([key]) => [key, el("textarea", { id: `field-${key}`, required: true })]));
   const output = el("div", { class: "answers" });
   const message = el("span", { class: "error", role: "alert" });
-  const submit = el("button", { class: "primary", type: "submit" }, "Run on all three");
+  const submit = el("button", { class: "primary", type: "submit" }, "Run on every endpoint");
   const setExample = (example) => task.fields.forEach(([key]) => { inputs[key].value = example[key]; });
 
   async function run(event) {
@@ -562,7 +597,7 @@ function playground(task) {
       message.textContent = error.message;
     } finally {
       submit.disabled = false;
-      submit.textContent = "Run on all three";
+      submit.textContent = "Run on every endpoint";
     }
   }
 
@@ -570,7 +605,7 @@ function playground(task) {
     "form",
     { class: "panel", onsubmit: run },
     el("strong", {}, "Try it live"),
-    el("p", { class: "note" }, "Your input goes to all three endpoints at once. Watch the response times."),
+    el("p", { class: "note" }, "Your input goes to every endpoint at once, including any trained models. Watch the response times."),
     ...task.fields.flatMap(([key, label]) => [el("label", { for: `field-${key}` }, label), inputs[key]]),
     el(
       "div",

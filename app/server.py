@@ -13,9 +13,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StrictStr
 
+from bench import supervised
 from bench.endpoints import ENDPOINTS, make_client
+from bench.nineteenth import NineteenthError
 from bench.tasks import TASKS
-from bench.tasks.base import ROOT, Task
+from bench.tasks.base import ROOT, TRAINED, Task
 
 RESULTS = Path(os.environ.get("RESULTS_DIR", ROOT / "results"))
 MAX_INPUT_CHARS = 20_000
@@ -81,14 +83,17 @@ def try_task(task: str, body: TryBody) -> dict:
     except openai.OpenAIError:
         raise HTTPException(503, "OPENAI_API_KEY is missing. Add it to .env and restart the server.")
 
+    # A trained endpoint joins the playground once tools.train has made its model.
+    names = [n for n in ENDPOINTS if n not in TRAINED or supervised.model_path(chosen.name, n).exists()]
+
     def ask(name: str):
         try:
             return ENDPOINTS[name](client, chosen, item), None
-        except openai.OpenAIError as error:
+        except (openai.OpenAIError, NineteenthError, supervised.NotTrained) as error:
             return None, error
 
-    with ThreadPoolExecutor(max_workers=len(ENDPOINTS)) as pool:
-        outcomes = dict(zip(ENDPOINTS, pool.map(ask, ENDPOINTS)))
+    with ThreadPoolExecutor(max_workers=len(names)) as pool:
+        outcomes = dict(zip(names, pool.map(ask, names)))
 
     errors = {name: error for name, (_, error) in outcomes.items() if error is not None}
     if any(isinstance(error, openai.AuthenticationError) for error in errors.values()):

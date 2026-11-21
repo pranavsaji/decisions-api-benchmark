@@ -182,3 +182,27 @@ def test_every_endpoint_failing_is_502_with_the_upstream_message(client, monkeyp
 def test_the_page_is_served(client):
     response = client.get("/")
     assert response.status_code == 200 and "Decisions API benchmark" in response.text
+
+
+def test_a_trained_endpoint_joins_the_playground_only_once_its_model_exists(client, monkeypatch, tmp_path):
+    from bench import supervised
+
+    monkeypatch.setattr(supervised, "MODELS", tmp_path / "models")
+    endpoints = {**server.ENDPOINTS, "local_baseline": answer(0.6)}
+    monkeypatch.setattr(server, "ENDPOINTS", endpoints)
+    assert "local_baseline" not in client.post("/api/try/injection", json=BODY).json()["answers"]
+    supervised.save_model("injection", "local_baseline", {"file": "x.npz"})
+    assert "local_baseline" in client.post("/api/try/injection", json=BODY).json()["answers"]
+
+
+def test_a_19th_failure_shows_on_its_card_only(client, monkeypatch, tmp_path):
+    from bench import supervised
+    from bench.nineteenth import NineteenthError
+
+    monkeypatch.setattr(supervised, "MODELS", tmp_path / "models")
+    supervised.save_model("injection", "nineteenth", {"prediction_url": "https://p"})
+    endpoints = {**server.ENDPOINTS, "nineteenth": failing(NineteenthError("19th answered 503", status=503))}
+    monkeypatch.setattr(server, "ENDPOINTS", endpoints)
+    answers = client.post("/api/try/injection", json=BODY).json()["answers"]
+    assert answers["nineteenth"] == {"error": "19th answered 503"}
+    assert answers["decisions"]["label"] == "attack"

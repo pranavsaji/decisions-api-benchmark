@@ -8,18 +8,22 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 
-from bench import metrics
+from bench import embeddings, metrics, supervised
 from bench.endpoints import ENDPOINTS, MODEL
 from bench.runner import cache_path, load_cache
 from bench.tasks import TASKS
-from bench.tasks.base import DATA, ROOT, correct, load_items
+from bench.tasks.base import DATA, ROOT, TRAINED, correct, load_items
 
 RESULTS = ROOT / "results"
 ENDPOINT_TITLES = {
     "decisions": "Decisions API",
     "responses_default": "Responses API, default",
     "responses_tuned": "Responses API, tuned",
+    "nineteenth": "19th",
+    "local_baseline": "Local baseline",
 }
+# Model details safe to publish: no prediction URL or request key.
+TRAINING_FIELDS = ("rows", "training_mode", "model_variant", "wall_seconds", "model_bytes", "C", "train_seconds")
 
 
 def _mean(values: list) -> float | None:
@@ -39,6 +43,11 @@ def summarise_endpoint(task, items: list[dict], cache: dict, endpoint: str) -> t
         "cached": _mean([row.get("cached_tokens") for _, row in answered]),
         "output": _mean([row.get("output_tokens") for _, row in answered]),
     }
+    if endpoint in TRAINED:
+        # Only the embedding call is billed per decision that we can price; 19th publishes no prices in its alpha.
+        cost = None if tokens["input"] is None else tokens["input"] * embeddings.PRICE_PER_MILLION / 1000
+    else:
+        cost = metrics.cost_per_1000(tokens["input"], tokens["cached"], tokens["output"])
     summary = {
         "counts": {
             "planned": len(items),
@@ -56,8 +65,11 @@ def summarise_endpoint(task, items: list[dict], cache: dict, endpoint: str) -> t
             "histogram": metrics.histogram(latencies, metrics.LATENCY_EDGES_MS),
         },
         "tokens": tokens,
-        "cost_per_1000": metrics.cost_per_1000(tokens["input"], tokens["cached"], tokens["output"]),
+        "cost_per_1000": cost,
     }
+    if endpoint in TRAINED:
+        summary["latency_ms"]["embed_p50"] = metrics.percentile([row.get("embed_ms") for _, row in answered if row.get("embed_ms") is not None], 0.5)
+        summary["latency_ms"]["predict_p50"] = metrics.percentile([row.get("predict_ms") for _, row in answered if row.get("predict_ms") is not None], 0.5)
     answers = {
         item["id"]: {
             "status": prediction["status"],
@@ -94,17 +106,33 @@ def paired_comparison(task, items: list[dict], answers: dict, endpoint: str, bas
     return {**compared, "baseline": baseline, "n": len(shared)} if compared else None
 
 
+def reported_endpoints(cache: dict) -> list[str]:
+    """The no-examples endpoints always; a trained one once it has answers cached."""
+    ran = {endpoint for _, endpoint in cache}
+    return [name for name in ENDPOINTS if name not in TRAINED or name in ran]
+
+
+def training_details(task_name: str, endpoints: list[str]) -> dict:
+    details = {}
+    for endpoint in endpoints:
+        if endpoint in TRAINED and supervised.model_path(task_name, endpoint).exists():
+            info = supervised.load_model(task_name, endpoint)
+            details[endpoint] = {key: info[key] for key in TRAINING_FIELDS if key in info}
+    return details
+
+
 def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None) -> dict:
+    names = reported_endpoints(cache)
     endpoints = {}
     answers = {}
-    for endpoint in ENDPOINTS:
+    for endpoint in names:
         endpoints[endpoint], answers[endpoint] = summarise_endpoint(task, items, cache, endpoint)
     cases = [
         {
             "id": item["id"],
             "label": item["label"],
             "fields": {key: item[key] for key, _ in task.fields},
-            "answers": {endpoint: answers[endpoint][item["id"]] for endpoint in ENDPOINTS if item["id"] in answers[endpoint]},
+            "answers": {endpoint: answers[endpoint][item["id"]] for endpoint in names if item["id"] in answers[endpoint]},
         }
         for item in items
     ]
@@ -118,7 +146,15 @@ def build_task_report(task, items: list[dict], cache: dict, dataset: dict | None
         "fields": [list(field) for field in task.fields],
         "headline": task.headline,
         "endpoints": endpoints,
-        "paired": {name: paired_comparison(task, items, answers, name) for name in ENDPOINTS if name != "decisions"},
+        "paired": {name: paired_comparison(task, items, answers, name) for name in names if name != "decisions"},
+        # 19th against the plain model trained on the same rows: what 19th adds beyond having labels.
+        "paired_trained": (
+            paired_comparison(task, items, answers, "nineteenth", baseline="local_baseline")
+            if all(name in names for name in TRAINED)
+            else None
+        ),
+        "training": training_details(task.name, names),
+        "embedding_model": embeddings.MODEL if any(name in TRAINED for name in names) else None,
         "cases": cases,
     }
 
@@ -144,7 +180,12 @@ def build_summary(reports: list[dict]) -> dict:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "model": MODEL,
-        "prices": {"per_million": metrics.PRICES_PER_MILLION, "read_on": metrics.PRICES_READ_ON},
+        "prices": {
+            "per_million": metrics.PRICES_PER_MILLION,
+            "read_on": metrics.PRICES_READ_ON,
+            "embedding_per_million": embeddings.PRICE_PER_MILLION,
+            "embedding_model": embeddings.MODEL,
+        },
         "rows": rows,
     }
 
@@ -163,6 +204,11 @@ def _metric(metric: dict) -> str:
         low, high = (_value(bound, metric["format"]).rstrip("%") for bound in metric["ci"])
         text += f" ({low} to {high})"
     return text
+
+
+def _cost(value: float) -> str:
+    # The embedding-only cost of the trained endpoints is a fraction of a tenth of a cent.
+    return f"${value:.4f}" if value < 0.001 else f"${value:.3f}"
 
 
 def _answered(counts: dict) -> str:
@@ -190,25 +236,32 @@ def markdown(built: dict) -> str:
         lines.append(row(metric["label"], lambda s, key=key: _metric(s["metrics"][key])))
     headline = summaries[names[0]]["metrics"][built["headline"]]
 
-    def paired(name: str) -> str:
-        if name == "decisions":
-            return "baseline"
-        compared = built["paired"].get(name)
+    def difference(compared: dict | None) -> str:
         if not compared or not compared["ci"]:
             return "no data"
         scale, digits, unit = (100, 1, " points") if headline["format"] == "percent" else (1, 3, "")
         low, high = (f"{bound * scale:+.{digits}f}" for bound in compared["ci"])
         return f"{compared['difference'] * scale:+.{digits}f}{unit} ({low} to {high})"
 
+    def paired(name: str) -> str:
+        return "baseline" if name == "decisions" else difference(built["paired"].get(name))
+
     lines.append(
         f"| {headline['label']}, difference from Decisions API on the same items | "
         + " | ".join(paired(name) for name in names)
         + " |"
     )
+    if built.get("paired_trained"):
+        cells = {"local_baseline": "baseline", "nineteenth": difference(built["paired_trained"])}
+        lines.append(
+            f"| {headline['label']}, difference from the local baseline on the same items | "
+            + " | ".join(cells.get(name, "") for name in names)
+            + " |"
+        )
     lines.append(row("Median response time", lambda s: ms(s["latency_ms"]["p50"])))
     lines.append(row("95th-percentile response time", lambda s: ms(s["latency_ms"]["p95"])))
     lines.append(
-        row("Cost per 1,000 decisions", lambda s: "no data" if s["cost_per_1000"] is None else f"${s['cost_per_1000']:.3f}")
+        row("Cost per 1,000 decisions", lambda s: "no data" if s["cost_per_1000"] is None else _cost(s["cost_per_1000"]))
     )
     lines.append(row("Answered", lambda s: _answered(s["counts"])))
     return "\n".join(lines)

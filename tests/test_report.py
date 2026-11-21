@@ -158,3 +158,44 @@ def test_summary_rows_carry_the_paired_comparison():
     assert by_endpoint["decisions"]["paired"] is None
     assert by_endpoint["responses_default"]["paired"]["difference"] == pytest.approx(0.25)
     assert by_endpoint["responses_tuned"]["paired"] is None
+
+
+def trained_row(item_id, endpoint, attack, latency=60):
+    return {
+        "item_id": item_id, "endpoint": endpoint, "status": "ok",
+        "raw": {"probabilities": {"attack": attack, "benign": 1 - attack}} if endpoint == "local_baseline"
+        else {"task": "injection", "output": {"probability": attack}},
+        "latency_ms": latency, "embed_ms": latency - 10, "predict_ms": 10,
+        "input_tokens": 50, "cached_tokens": None, "output_tokens": 0,
+    }
+
+
+def trained_cache():
+    rows = [*paired_cache().values()]
+    rows += [trained_row(i, "nineteenth", p) for i, p in zip("abcd", (0.9, 0.1, 0.8, 0.3))]
+    rows += [trained_row(i, "local_baseline", p) for i, p in zip("abcd", (0.6, 0.7, 0.8, 0.3))]
+    return {(row["item_id"], row["endpoint"]): row for row in rows}
+
+
+def test_trained_endpoints_appear_only_once_they_have_answers():
+    assert "nineteenth" not in report.build_task_report(TASK, ITEMS, cache(), None)["endpoints"]
+    built = report.build_task_report(TASK, ITEMS, trained_cache(), None)
+    assert list(built["endpoints"])[-2:] == ["nineteenth", "local_baseline"]
+    assert built["embedding_model"] == "text-embedding-3-small"
+
+
+def test_trained_endpoints_price_the_embedding_and_split_the_latency():
+    summary = report.build_task_report(TASK, ITEMS, trained_cache(), None)["endpoints"]["nineteenth"]
+    assert summary["cost_per_1000"] == pytest.approx(50 * 0.02 / 1000)
+    assert (summary["latency_ms"]["embed_p50"], summary["latency_ms"]["predict_p50"]) == (50, 10)
+
+
+def test_19th_is_compared_with_the_local_baseline_on_the_same_items():
+    built = report.build_task_report(TASK, ITEMS, trained_cache(), None)
+    # On a to d, 19th ranks both attacks above both benign items (AUC 1.0); the baseline gets 0.75.
+    assert built["paired_trained"]["difference"] == pytest.approx(0.25)
+    assert built["paired_trained"]["baseline"] == "local_baseline"
+    lines = report.markdown(built).splitlines()
+    (row,) = [line for line in lines if "difference from the local baseline" in line]
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    assert cells[-1] == "baseline" and cells[-2].startswith("+0.250 (")
