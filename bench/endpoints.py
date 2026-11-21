@@ -1,8 +1,13 @@
-"""The three ways of asking gpt-6-luna one task question. Each returns the raw answer, timing and tokens."""
+"""Every endpoint in the benchmark. Each returns the raw answer, timing and tokens.
+
+Three ask gpt-6-luna with no examples. Two answer from a model trained on labelled examples
+(19th and a local baseline, see bench/supervised.py).
+"""
 import time
 
 import openai
 
+from bench import supervised
 from bench.tasks.base import Task, responses_prompt
 
 MODEL = "gpt-6-luna"
@@ -65,4 +70,6 @@ ENDPOINTS = {
     "decisions": decisions,
     "responses_default": responses_default,
     "responses_tuned": responses_tuned,
+    "nineteenth": supervised.nineteenth_call,
+    "local_baseline": supervised.baseline_call,
 }

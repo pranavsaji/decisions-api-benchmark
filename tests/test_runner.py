@@ -110,7 +110,7 @@ def test_a_bad_request_is_recorded_without_retrying(tmp_path):
 @pytest.mark.parametrize("error_class, status", [(openai.AuthenticationError, 401), (openai.PermissionDeniedError, 403)])
 def test_a_rejected_key_or_missing_access_stops_the_run(tmp_path, error_class, status):
     endpoint = Recorder({"a": (api_error(error_class, status), 99)})
-    with pytest.raises(SystemExit, match="OpenAI rejected the request"):
+    with pytest.raises(SystemExit, match="every call would fail"):
         runner.run(TASK, ITEMS, {"decisions": endpoint}, tmp_path / "c.jsonl", workers=1, pause=0)
     assert endpoint.calls.count("a") == 1
 
@@ -167,3 +167,26 @@ def test_an_interrupted_run_stops_calling_and_keeps_every_answer_it_paid_for(tmp
         runner.run(TASK, items, {"decisions": slow}, path, workers=2, on_row=interrupt_after_three)
     assert len(calls) < 10
     assert sorted(r["item_id"] for r in rows(path)) == sorted(calls)
+
+
+def test_an_untrained_model_stops_the_run_naming_the_command(tmp_path):
+    from bench.supervised import NotTrained
+
+    endpoint = Recorder({"a": (NotTrained("Run: uv run python -m tools.train injection"), 99)})
+    with pytest.raises(SystemExit, match="tools.train injection"):
+        runner.run(TASK, ITEMS, {"nineteenth": endpoint}, tmp_path / "c.jsonl", workers=1, pause=0)
+
+
+@pytest.mark.parametrize("status, calls, outcome", [(401, 1, "stop"), (429, 3, "error"), (400, 1, "error")])
+def test_19th_errors_stop_retry_or_record(tmp_path, status, calls, outcome):
+    from bench.nineteenth import NineteenthError
+
+    error = NineteenthError("19th answered", status=status, retryable=status == 429)
+    endpoint = Recorder({"a": (error, 99)})
+    path = tmp_path / "c.jsonl"
+    if outcome == "stop":
+        with pytest.raises(SystemExit):
+            runner.run(TASK, ITEMS[:1], {"nineteenth": endpoint}, path, workers=1, pause=0)
+    else:
+        assert runner.run(TASK, ITEMS[:1], {"nineteenth": endpoint}, path, workers=1, pause=0)["error"] == 1
+    assert endpoint.calls.count("a") == calls

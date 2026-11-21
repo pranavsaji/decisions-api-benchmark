@@ -9,7 +9,7 @@ ANSWERS = [{"type": "predicate", "name": "injection", "probability": 0.9}]
 
 
 def test_endpoint_names_and_order():
-    assert list(endpoints.ENDPOINTS) == ["decisions", "responses_default", "responses_tuned"]
+    assert list(endpoints.ENDPOINTS) == ["decisions", "responses_default", "responses_tuned", "nineteenth", "local_baseline"]
     assert endpoints.MODEL == "gpt-6-luna"
 
 

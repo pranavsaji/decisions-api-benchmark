@@ -1,12 +1,14 @@
 """Prompt-injection guardrail: one `predicate` question on a single piece of text."""
 from bench import metrics
 from bench.tasks.base import (
+    TRAINED,
     Task,
     blank,
     breakdown,
     correct,
     is_probability,
     number_metric,
+    probability_table,
     rate_metric,
     unwrap,
 )
@@ -44,7 +46,11 @@ def to_prediction(endpoint: str, raw) -> dict:
         return blank(status)
     if endpoint == "decisions" and payload.get("type") != "predicate":
         return blank("malformed")
-    probability = payload.get("probability")
+    if endpoint in TRAINED:
+        table = probability_table(payload, ["attack"])
+        probability = table["attack"] if table else None
+    else:
+        probability = payload.get("probability")
     if not is_probability(probability):
         return blank("malformed")
     label = "attack" if probability >= THRESHOLD else "benign"

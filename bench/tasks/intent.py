@@ -1,6 +1,6 @@
 """Customer-message intent routing on Banking77: one `choice` question with 77 options."""
 from bench import metrics
-from bench.tasks.base import Task, blank, breakdown, correct, is_probability, rate_metric, unwrap
+from bench.tasks.base import TRAINED, Task, blank, breakdown, correct, is_probability, probability_table, rate_metric, unwrap
 
 INTENTS = [
     "Refund_not_showing_up", "activate_my_card", "age_limit", "apple_pay_or_google_pay", "atm_support",
@@ -64,7 +64,15 @@ def to_prediction(endpoint: str, raw) -> dict:
     status, payload = unwrap(endpoint, raw)
     if status != "ok":
         return blank(status)
-    if endpoint == "decisions":
+    if endpoint in TRAINED:
+        table = probability_table(payload, INTENTS)
+        if table is None:
+            return blank("malformed")
+        ordered = sorted(INTENTS, key=lambda v: -table[v])
+        choice = payload.get("label") if payload.get("label") is not None else ordered[0]
+        probability = table.get(choice) if isinstance(choice, str) else None
+        ranked = [choice] + [v for v in ordered if v != choice][:2]
+    elif endpoint == "decisions":
         if payload.get("type") != "choice":
             return blank("malformed")
         choice = payload.get("choice")

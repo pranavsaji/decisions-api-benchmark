@@ -1,12 +1,14 @@
 """Search relevance grading on TREC Deep Learning 2019: one `score` question with four levels."""
 from bench import metrics
 from bench.tasks.base import (
+    TRAINED,
     Task,
     blank,
     breakdown,
     correct,
     is_probability,
     number_metric,
+    probability_table,
     rate_metric,
     unwrap,
 )
@@ -61,6 +63,22 @@ def to_prediction(endpoint: str, raw) -> dict:
     status, payload = unwrap(endpoint, raw)
     if status != "ok":
         return blank(status)
+    if endpoint in TRAINED:
+        table = probability_table(payload, GRADES)
+        if table is None:
+            return blank("malformed")
+        # 19th's ordered-class answer names its own grade, which can differ from the likeliest one.
+        label = payload.get("label")
+        if isinstance(label, str) and label.isdigit():
+            label = int(label)
+        if label is None:
+            label = max(GRADES, key=lambda n: (table[n], -n))
+        expected = payload.get("expected")
+        if expected is None:
+            expected = sum(n * table[n] for n in GRADES) / sum(table.values())
+        if not _is_grade(label) or isinstance(expected, bool) or not isinstance(expected, (int, float)):
+            return blank("malformed")
+        return {**blank("ok"), "label": label, "probability": table[label], "expected": float(expected)}
     if endpoint == "decisions":
         if payload.get("type") != "score":
             return blank("malformed")

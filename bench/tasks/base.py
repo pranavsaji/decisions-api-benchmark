@@ -27,6 +27,10 @@ class Task:
     headline_value: Callable[[list[tuple[dict, dict]]], float | None]
 
 
+# Endpoints that answer from a model trained on labelled examples (see bench/supervised.py).
+TRAINED = ("nineteenth", "local_baseline")
+
+
 def blank(status: str) -> dict:
     return {"status": status, "label": None, "ranked": [], "probability": None, "expected": None}
 
@@ -39,6 +43,11 @@ def unwrap(endpoint: str, raw) -> tuple[str, dict | None]:
     """Return ("ok", payload), ("refused", None) or ("malformed", None) for a raw endpoint answer."""
     if not isinstance(raw, dict):
         return "malformed", None
+    if endpoint in TRAINED:
+        from bench.supervised import reduced  # imported here: bench.supervised imports this module
+
+        payload = reduced(endpoint, raw)
+        return ("ok", payload) if payload else ("malformed", None)
     if endpoint == "decisions":
         answers = raw.get("answers")
         if not isinstance(answers, list) or not answers or not isinstance(answers[0], dict):
@@ -53,6 +62,13 @@ def unwrap(endpoint: str, raw) -> tuple[str, dict | None]:
     except (TypeError, ValueError):
         return "malformed", None
     return ("ok", payload) if isinstance(payload, dict) else ("malformed", None)
+
+
+def probability_table(payload: dict, labels) -> dict | None:
+    """A trained endpoint's probabilities keyed by each task label, or None if any is missing or invalid."""
+    table = payload.get("probabilities") or {}
+    values = {label: table.get(str(label)) for label in labels}
+    return values if all(is_probability(v) for v in values.values()) else None
 
 
 def correct(item: dict, prediction: dict) -> bool:

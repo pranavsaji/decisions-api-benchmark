@@ -1,6 +1,7 @@
 """Run a task's items through every endpoint, interleaved, and cache each raw answer.
 
 Usage: uv run python -m bench.runner <intent|injection|relevance|all> [--limit N] [--workers 8] [--retry-errors]
+       [--endpoints decisions,responses_default,...]
 Answers are cached in .tmp/runs/<task>.jsonl, so an interrupted run resumes without paying twice.
 """
 import argparse
@@ -14,11 +15,18 @@ import openai
 from dotenv import load_dotenv
 
 from bench.endpoints import ENDPOINTS, make_client
+from bench.nineteenth import NineteenthError
+from bench.supervised import NotTrained
 from bench.tasks import TASKS
 from bench.tasks.base import ROOT, load_items
 
-# A rejected key or missing access will fail every call, so the run stops instead of recording errors.
-FATAL = (openai.AuthenticationError, openai.PermissionDeniedError)
+# A rejected key, missing access or an untrained model will fail every call, so the run stops
+# instead of recording errors.
+FATAL = (openai.AuthenticationError, openai.PermissionDeniedError, NotTrained)
+
+
+class Fatal(Exception):
+    pass
 
 
 def cache_path(task_name: str) -> Path:
@@ -52,8 +60,14 @@ def attempt(call, client, task, item: dict, retries: int, pause: float) -> dict:
     for tries in range(retries + 1):
         try:
             return {"status": "ok", **call(client, task, item)}
-        except FATAL:
-            raise
+        except FATAL as error:
+            raise Fatal(str(error)) from error
+        except NineteenthError as error:
+            if error.fatal:
+                raise Fatal(str(error)) from error
+            if not error.retryable or tries == retries:
+                return {"status": "error", "error": str(error)}
+            time.sleep(pause * (tries + 1))
         except openai.BadRequestError as error:
             return {"status": "error", "error": str(error)}  # the same request would fail again
         except openai.OpenAIError as error:
@@ -102,8 +116,8 @@ def run(
             for future in as_completed(futures):
                 try:
                     row = write(future)
-                except FATAL as error:
-                    raise SystemExit(f"OpenAI rejected the request, stopping: {error}")
+                except Fatal as error:
+                    raise SystemExit(f"Stopping, every call would fail: {error}")
                 if on_row:
                     on_row(row)
         except BaseException:
@@ -123,7 +137,13 @@ def main() -> None:
     parser.add_argument("--limit", type=int, help="only run the first N items")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--retry-errors", action="store_true", help="rerun pairs cached as errors")
+    parser.add_argument("--endpoints", help=f"comma-separated subset of: {', '.join(ENDPOINTS)}")
     args = parser.parse_args()
+    chosen = args.endpoints.split(",") if args.endpoints else list(ENDPOINTS)
+    unknown = [name for name in chosen if name not in ENDPOINTS]
+    if unknown:
+        sys.exit(f"Unknown endpoints: {', '.join(unknown)}. Choose from: {', '.join(ENDPOINTS)}")
+    endpoints = {name: ENDPOINTS[name] for name in chosen}
 
     load_dotenv(ROOT / ".env")
     try:
@@ -145,7 +165,7 @@ def main() -> None:
             done += 1
             print(f"\r{name}: {done} new answers", end="", flush=True)
 
-        counts = run(TASKS[name], items, ENDPOINTS, cache_path(name), args.workers, client, args.retry_errors, on_row=progress)
+        counts = run(TASKS[name], items, endpoints, cache_path(name), args.workers, client, args.retry_errors, on_row=progress)
         print(f"\r{name}: {counts['cached']} cached, {counts['ok']} answered, {counts['error']} errors")
         if counts["error"]:
             print(f"  Rerun with --retry-errors to try the {counts['error']} failed calls again.")
