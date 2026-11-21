@@ -43,7 +43,9 @@ predicts, so their response time includes the embedding. The two run interleaved
 | Search relevance | TREC Deep Learning 2020 judgements: different queries, same passages and scale; up to 1,000 per grade | 2,277 |
 
 19th was trained with `training_mode: high` and the default `fast` model file; training took
-32 to 110 seconds per task. The baseline's strength (C) was chosen by 3-fold cross-validation on
+32 to 113 seconds per task. Intent and injection went through `/v1/fit`. Search relevance went
+through 19th's project upload route, the only one that accepts `pairs`, which tells 19th to
+compare the query and passage embeddings rather than treat them as unrelated columns. The baseline's strength (C) was chosen by 3-fold cross-validation on
 the training rows only.
 
 ## Results
@@ -86,12 +88,12 @@ a real difference.
 
 | | Decisions API | Responses API, default | Responses API, tuned | 19th | Local baseline |
 |---|---|---|---|---|---|
-| Agreement with human grades (weighted kappa) | 0.581 (0.534 to 0.625) | 0.580 (0.532 to 0.630) | 0.616 (0.565 to 0.666) | 0.080 (0.046 to 0.113) | 0.296 (0.238 to 0.359) |
-| Exact grade matched | 43.3% (39.4 to 47.3) | 44.7% (40.7 to 48.7) | 46.3% (42.4 to 50.3) | 26.8% (23.4 to 30.5) | 34.7% (31.0 to 38.6) |
-| Agreement with human grades (weighted kappa), difference from Decisions API on the same items | baseline | -0.001 (-0.031 to +0.030) | +0.034 (+0.002 to +0.067) | -0.502 (-0.559 to -0.445) | -0.285 (-0.350 to -0.217) |
-| Agreement with human grades (weighted kappa), difference from the local baseline on the same items |  |  |  | -0.216 (-0.282 to -0.157) | baseline |
+| Agreement with human grades (weighted kappa) | 0.581 (0.534 to 0.625) | 0.580 (0.532 to 0.630) | 0.616 (0.565 to 0.666) | 0.407 (0.345 to 0.466) | 0.297 (0.239 to 0.361) |
+| Exact grade matched | 43.3% (39.4 to 47.3) | 44.7% (40.7 to 48.7) | 46.3% (42.4 to 50.3) | 36.0% (32.3 to 39.9) | 34.8% (31.1 to 38.7) |
+| Agreement with human grades (weighted kappa), difference from Decisions API on the same items | baseline | -0.001 (-0.031 to +0.030) | +0.034 (+0.002 to +0.067) | -0.174 (-0.238 to -0.106) | -0.285 (-0.350 to -0.216) |
+| Agreement with human grades (weighted kappa), difference from the local baseline on the same items |  |  |  | +0.110 (+0.059 to +0.164) | baseline |
 | Median response time | 127 ms | 1,692 ms | 1,332 ms | 281 ms | 188 ms |
-| 95th-percentile response time | 286 ms | 2,527 ms | 2,232 ms | 440 ms | 251 ms |
+| 95th-percentile response time | 286 ms | 2,527 ms | 2,232 ms | 406 ms | 261 ms |
 | Cost per 1,000 decisions | $0.028 | $0.079 | $0.051 | $0.002 | $0.002 |
 | Answered | 600 of 600 | 600 of 600 | 600 of 600 | 600 of 600 | 600 of 600 |
 
@@ -125,26 +127,27 @@ a real difference.
 - **Labelled examples beat every no-examples endpoint on intent and injection.** 19th reached
   93.9% top-1 on intent (against 83.8% for the best OpenAI endpoint) and 0.976 AUC on injection
   (against 0.948).
-- **19th did no better than a plain logistic regression on the same inputs.** On the same items
-  it trails the local baseline by 0.9 points on intent (range -2.1 to +0.3) and leads it by 0.005
-  AUC on injection (range -0.002 to +0.012): both ties.
-- **On search relevance it lost to everything.** 19th's weighted kappa is 0.080 against 0.296
-  for the local baseline and 0.58 to 0.62 for the OpenAI endpoints. Its expected grade barely
-  moves with the human grade (0.76 for grade 0 against 0.93 for grade 3). Relevance depends on
-  how query and passage relate; the baseline is given their element-wise product, but 19th gets
-  the two embeddings as separate columns because `/v1/fit` refuses the `pairs` field meant for
-  this (see limits). Both trained models also learned from 54 queries only.
+- **On single texts, 19th did no better than a plain logistic regression on the same inputs.**
+  On the same items it trails the local baseline by 0.9 points on intent (range -2.1 to +0.3)
+  and leads it by 0.005 AUC on injection (range -0.002 to +0.012): both ties.
+- **On search relevance 19th beat the baseline but not the language models.** With the query and
+  passage declared as a pair, its weighted kappa is 0.407 against 0.297 for the local baseline
+  (+0.110 on the same items, range +0.059 to +0.164), and 0.58 to 0.62 for the OpenAI endpoints.
+  Both trained models learned from 54 queries only. Without the pair, trained through `/v1/fit`,
+  19th scored 0.080: its expected grade barely moved with the human grade.
 - **Response time is about twice the Decisions API's, mostly the embedding call.** 19th's median
   was 267 to 281 ms: about 185 ms embedding plus about 80 ms for 19th's hosted prediction call.
-  The local baseline answers in under 1 ms after the same embedding (184 to 188 ms in all). 19th's
-  estimate for its downloaded model file is 0.03 ms per row on a server CPU; this test used the
-  hosted call, not the file.
+  The local baseline answers in under 1 ms after the same embedding (184 to 188 ms in all). 19th
+  estimates 0.03 to 0.09 ms per row for its downloadable model files on its reference server CPU;
+  this test used the hosted call and did not time the files.
 - **Every call answered.** 1,970 of 1,970 for each, with no errors.
 
 ### Limits of this test
 
 - One prompt per task, written before the run, with no tuning.
-- One model, one run, one day. Latency was measured from one machine with 8 parallel requests.
+- One model, one run. Latency was measured from one machine with 8 parallel requests. The OpenAI
+  endpoints ran on 10 October and the trained models on 20 November, so response times across
+  the two groups were not measured under the same conditions; within each group they were.
 - The injection labels come from two community datasets with different ideas of what counts as
   an attack. Results are broken down by source in the dashboard.
 - The relevance sample is drawn from judged passages that retrieval systems surfaced, not from
@@ -156,10 +159,12 @@ a real difference.
   the order was checked on every answer (sorted labels for intent, the declared order 0 to 3 for
   relevance).
 - 19th's `/v1/fit` refuses `column_types` and `pairs`, and read base64 float32 embedding cells as
-  free text, so embeddings are sent as JSON arrays of numbers (six significant digits). A
-  relevance model with an added query-passage similarity column trained but could not be served
-  (404 "model not found", download unavailable), twice, so the reported relevance model has the
-  two embeddings only.
+  free text, so embeddings are sent as JSON arrays of numbers (six significant digits). The
+  project route that accepts `pairs` needs the key's project ID, which 19th lists only inside a
+  training run's record; `tools.train` reads it from an earlier run, or from
+  `NINETEENTH_PROJECT_ID`. A `/v1/fit` relevance model with an added similarity column trained
+  but could not be served (404 "model not found"), twice.
+- 19th was trained once per task, in `high` mode. Its `ultra` mode is described as more accurate.
 - The trained models depend on the embedding model as much as on the learner; another
   embedding could change both.
 

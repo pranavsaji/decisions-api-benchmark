@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-21T02:37:31+00:00",
+ "generated_at": "2026-11-21T02:54:29+00:00",
  "model": "gpt-6-luna",
  "prices": {
   "per_million": {
@@ -27,7 +27,9 @@
     "format": "percent"
    },
    "paired": null,
+   "paired_trained": null,
    "p50_ms": 132.0,
+   "embed_p50_ms": null,
    "p95_ms": 212.19999999999982,
    "cost_per_1000": 0.0999048051948052,
    "answered": 769,
@@ -56,7 +58,9 @@
     "baseline": "decisions",
     "n": 769
    },
+   "paired_trained": null,
    "p50_ms": 1965.5,
+   "embed_p50_ms": null,
    "p95_ms": 3010.0499999999993,
    "cost_per_1000": 0.15519955844155842,
    "answered": 770,
@@ -85,7 +89,9 @@
     "baseline": "decisions",
     "n": 769
    },
+   "paired_trained": null,
    "p50_ms": 1454.5,
+   "embed_p50_ms": null,
    "p95_ms": 2071.2,
    "cost_per_1000": 0.11992193506493508,
    "answered": 770,
@@ -114,7 +120,17 @@
     "baseline": "decisions",
     "n": 769
    },
+   "paired_trained": {
+    "difference": -0.009090909090909038,
+    "ci": [
+     -0.020779220779220786,
+     0.0025974025974025983
+    ],
+    "baseline": "local_baseline",
+    "n": 770
+   },
    "p50_ms": 267.0,
+   "embed_p50_ms": 184.0,
    "p95_ms": 376.54999999999995,
    "cost_per_1000": 0.0002510909090909091,
    "answered": 770,
@@ -143,7 +159,9 @@
     "baseline": "decisions",
     "n": 769
    },
+   "paired_trained": null,
    "p50_ms": 184.0,
+   "embed_p50_ms": 184.0,
    "p95_ms": 261.0,
    "cost_per_1000": 0.0002510909090909091,
    "answered": 770,
@@ -164,7 +182,9 @@
     "format": "number"
    },
    "paired": null,
+   "paired_trained": null,
    "p50_ms": 127.0,
+   "embed_p50_ms": null,
    "p95_ms": 242.0999999999999,
    "cost_per_1000": 0.03232966666666667,
    "answered": 600,
@@ -193,7 +213,9 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 1367.5,
+   "embed_p50_ms": null,
    "p95_ms": 2349.3999999999987,
    "cost_per_1000": 0.051163,
    "answered": 600,
@@ -222,7 +244,9 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 1019.0,
+   "embed_p50_ms": null,
    "p95_ms": 1651.1499999999999,
    "cost_per_1000": 0.03040716666666667,
    "answered": 600,
@@ -251,7 +275,17 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": {
+    "difference": 0.0047999999999999154,
+    "ci": [
+     -0.0021687407182923806,
+     0.012275129642828612
+    ],
+    "baseline": "local_baseline",
+    "n": 600
+   },
    "p50_ms": 268.0,
+   "embed_p50_ms": 185.0,
    "p95_ms": 380.3499999999997,
    "cost_per_1000": 0.002445266666666667,
    "answered": 600,
@@ -280,7 +314,9 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 184.0,
+   "embed_p50_ms": 184.0,
    "p95_ms": 247.0,
    "cost_per_1000": 0.002445266666666667,
    "answered": 600,
@@ -301,7 +337,9 @@
     "format": "number"
    },
    "paired": null,
+   "paired_trained": null,
    "p50_ms": 127.0,
+   "embed_p50_ms": null,
    "p95_ms": 286.0,
    "cost_per_1000": 0.02756616666666667,
    "answered": 600,
@@ -330,7 +368,9 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 1692.5,
+   "embed_p50_ms": null,
    "p95_ms": 2526.749999999999,
    "cost_per_1000": 0.07928533333333335,
    "answered": 600,
@@ -359,7 +399,9 @@
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 1331.5,
+   "embed_p50_ms": null,
    "p95_ms": 2232.1499999999996,
    "cost_per_1000": 0.05140950000000001,
    "answered": 600,
@@ -371,25 +413,35 @@
    "endpoint": "nineteenth",
    "headline": {
     "label": "Agreement with human grades (weighted kappa)",
-    "value": 0.07965451055662198,
+    "value": 0.40703971119133564,
     "ci": [
-     0.045895247971908866,
-     0.11298474478575074
+     0.34538830397320397,
+     0.46575754968135835
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": -0.501722641243065,
+    "difference": -0.17433744060835132,
     "ci": [
-     -0.5585578913014225,
-     -0.4454433816658262
+     -0.23793296408669942,
+     -0.10570610580250175
     ],
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": {
+    "difference": 0.11028160645318108,
+    "ci": [
+     0.058935172435897264,
+     0.16359525917665113
+    ],
+    "baseline": "local_baseline",
+    "n": 600
+   },
    "p50_ms": 281.0,
-   "p95_ms": 440.1999999999998,
+   "embed_p50_ms": 189.0,
+   "p95_ms": 406.0999999999999,
    "cost_per_1000": 0.0017795666666666668,
    "answered": 600,
    "planned": 600
@@ -400,25 +452,27 @@
    "endpoint": "local_baseline",
    "headline": {
     "label": "Agreement with human grades (weighted kappa)",
-    "value": 0.29613466334164584,
+    "value": 0.29675810473815456,
     "ci": [
-     0.23841480184567726,
-     0.35944055938364644
+     0.2386833544056984,
+     0.36076203397915635
     ],
     "n": 600,
     "format": "number"
    },
    "paired": {
-    "difference": -0.2852424884580411,
+    "difference": -0.2846190470615324,
     "ci": [
-     -0.35022342052842864,
-     -0.2172014505603672
+     -0.34970466127543187,
+     -0.2155410595818568
     ],
     "baseline": "decisions",
     "n": 600
    },
+   "paired_trained": null,
    "p50_ms": 188.0,
-   "p95_ms": 251.04999999999995,
+   "embed_p50_ms": 188.0,
+   "p95_ms": 261.0999999999999,
    "cost_per_1000": 0.0017795666666666668,
    "answered": 600,
    "planned": 600
